@@ -1,0 +1,78 @@
+Compras: 316,727 · eventos: 164,820 · tickers con precio: 5,249 de 12,543
+Exceso de rentabilidad (%) tras la publicación; t calculada sobre medias mensuales.
+Filtros de operabilidad: precio ≥5 $ y volumen medio ≥1 M$/día salvo indicación.
+
+=== A cualquier compra ≥25k$ (operables) ===
+  1m: n=18247  exceso vs IWM media   0.13  mediana  -0.28  gana  48%  vs SPY media   0.03  t(meses)  1.23
+  3m: n=17997  exceso vs IWM media   0.22  mediana  -0.71  gana  48%  vs SPY media   0.13  t(meses)  1.66
+  6m: n=17628  exceso vs IWM media   0.19  mediana  -1.67  gana  46%  vs SPY media  -0.37  t(meses)  1.40
+  -- solo líquidas (≥20 M$/día):
+  1m: n= 8855  exceso vs IWM media  -0.09  mediana  -0.34  gana  48%  vs SPY media  -0.21  t(meses) -1.02
+  3m: n= 8708  exceso vs IWM media   0.12  mediana  -0.41  gana  49%  vs SPY media   0.01  t(meses)  0.81
+  6m: n= 8500  exceso vs IWM media   0.26  mediana  -1.10  gana  47%  vs SPY media  -0.24  t(meses)  1.06
+  -- por tramos (operables, 3m vs IWM):
+     2006-2012: n= 4312 media   0.96 mediana   0.00 gana  50%
+     2013-2019: n= 5736 media   0.63 mediana  -0.35 gana  49%
+     2020-2026: n= 7949 media  -0.48 mediana  -1.61 gana  46%
+
+=== B CEO/CFO ≥100k$ (operables) ===
+  1m: n= 4127  exceso vs IWM media   0.22  mediana   0.02  gana  50%  vs SPY media   0.14  t(meses)  0.79
+  3m: n= 4059  exceso vs IWM media   0.07  mediana  -1.29  gana  46%  vs SPY media   0.07  t(meses)  0.95
+  6m: n= 3949  exceso vs IWM media  -0.91  mediana  -3.10  gana  45%  vs SPY media  -1.49  t(meses) -0.20
+  -- solo líquidas (≥20 M$/día):
+  1m: n= 2090  exceso vs IWM media   0.14  mediana   0.07  gana  50%  vs SPY media   0.05  t(meses) -0.13
+  3m: n= 2044  exceso vs IWM media   0.18  mediana  -1.17  gana  47%  vs SPY media   0.13  t(meses)  0.77
+  6m: n= 1972  exceso vs IWM media  -0.76  mediana  -2.71  gana  45%  vs SPY media  -1.25  t(meses) -0.34
+  -- por tramos (operables, 3m vs IWM):
+     2006-2012: n=  725 media   1.59 mediana   0.18 gana  51%
+     2013-2019: n= 1302 media   0.16 mediana  -1.12 gana  46%
+     2020-2026: n= 2032 media  -0.54 mediana  -2.67 gana  45%
+
+=== C grupo ≥2 en 30 días (operables) ===
+  1m: n= 7844  exceso vs IWM media   0.06  mediana  -0.35  gana  48%  vs SPY media  -0.01  t(meses)  0.53
+  3m: n= 7760  exceso vs IWM media  -0.14  mediana  -1.28  gana  46%  vs SPY media  -0.08  t(meses) -0.48
+  6m: n= 7591  exceso vs IWM media  -0.49  mediana  -2.35  gana  45%  vs SPY media  -0.91  t(meses) -1.47
+  -- solo líquidas (≥20 M$/día):
+  1m: n= 3187  exceso vs IWM media  -0.10  mediana  -0.30  gana  48%  vs SPY media  -0.19  t(meses) -0.47
+  3m: n= 3147  exceso vs IWM media  -0.36  mediana  -1.00  gana  47%  vs SPY media  -0.24  t(meses) -0.61
+  6m: n= 3049  exceso vs IWM media  -0.68  mediana  -2.41  gana  46%  vs SPY media  -0.94  t(meses) -1.28
+  -- por tramos (operables, 3m vs IWM):
+     2006-2012: n= 1960 media   0.49 mediana  -0.58 gana  48%
+     2013-2019: n= 2379 media   0.68 mediana  -0.51 gana  48%
+     2020-2026: n= 3421 media  -1.08 mediana  -2.65 gana  43%
+
+=== D grupo ≥3 en 30 días (operables) ===
+  1m: n= 3718  exceso vs IWM media   0.34  mediana  -0.18  gana  49%  vs SPY media   0.28  t(meses)  2.32
+  3m: n= 3682  exceso vs IWM media   0.19  mediana  -1.06  gana  47%  vs SPY media   0.36  t(meses)  0.63
+  6m: n= 3588  exceso vs IWM media  -0.55  mediana  -2.18  gana  46%  vs SPY media  -0.89  t(meses) -0.96
+  -- solo líquidas (≥20 M$/día):
+  1m: n= 1517  exceso vs IWM media   0.20  mediana  -0.29  gana  49%  vs SPY media   0.18  t(meses)  0.79
+  3m: n= 1498  exceso vs IWM media   0.22  mediana  -0.49  gana  49%  vs SPY media   0.34  t(meses) -0.12
+  6m: n= 1439  exceso vs IWM media  -0.62  mediana  -2.58  gana  45%  vs SPY media  -0.75  t(meses) -0.89
+  -- por tramos (operables, 3m vs IWM):
+     2006-2012: n=  911 media   1.70 mediana   0.01 gana  50%
+     2013-2019: n= 1107 media   0.16 mediana  -0.54 gana  48%
+     2020-2026: n= 1664 media  -0.60 mediana  -2.48 gana  45%
+
+=== E sube participación ≥20 % (≥25k$) (operables) ===
+  1m: n=11527  exceso vs IWM media   0.23  mediana  -0.24  gana  48%  vs SPY media   0.14  t(meses)  1.07
+  3m: n=11399  exceso vs IWM media   0.24  mediana  -0.76  gana  48%  vs SPY media   0.13  t(meses)  1.16
+  6m: n=11171  exceso vs IWM media   0.18  mediana  -1.54  gana  47%  vs SPY media  -0.39  t(meses)  0.70
+  -- solo líquidas (≥20 M$/día):
+  1m: n= 5683  exceso vs IWM media  -0.03  mediana  -0.31  gana  48%  vs SPY media  -0.15  t(meses) -0.69
+  3m: n= 5605  exceso vs IWM media  -0.04  mediana  -0.43  gana  49%  vs SPY media  -0.14  t(meses)  0.31
+  6m: n= 5471  exceso vs IWM media  -0.02  mediana  -1.12  gana  47%  vs SPY media  -0.47  t(meses)  0.32
+  -- por tramos (operables, 3m vs IWM):
+     2006-2012: n= 3002 media   1.07 mediana   0.11 gana  50%
+     2013-2019: n= 3712 media   0.63 mediana  -0.39 gana  49%
+     2020-2026: n= 4685 media  -0.61 mediana  -1.99 gana  45%
+
+=== Cartera simulada (operables, 3 meses por posición, máx. 40 posiciones, costes según liquidez) ===
+                          CAGR %  vol %  Sharpe  MDD %  CAGR 2006-2012  CAGR 2013-2019  CAGR 2020-2026
+cartera                                                                                               
+C grupo ≥2 en 30 días       2.71  25.58    0.23 -59.73           -0.02            7.65            0.41
+D grupo ≥3 en 30 días       4.32  23.41    0.30 -54.27            4.15            8.26            0.33
+B CEO/CFO ≥100k$            4.92  23.23    0.32 -59.87            1.50            8.44            4.63
+A cualquier compra ≥25k$    7.18  25.31    0.40 -62.85            1.84           11.28            8.36
+SPY                         9.11  19.23    0.55 -56.47            1.62           11.96           13.77
+IWM                         6.98  24.32    0.40 -59.49            3.03            9.68            7.93

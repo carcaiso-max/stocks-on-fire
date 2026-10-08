@@ -1,0 +1,839 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stocks on fire</title>
+<script>
+try { const t = localStorage.getItem("tema13f"); if (t === "light" || t === "dark") document.documentElement.dataset.theme = t; } catch (e) {}
+</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root {
+  --bg: #f6f7f9; --panel: #ffffff; --panel2: #f1f3f6; --text: #1b1f24; --muted: #667085; --line: #e3e6ea;
+  --accent: #2f6fdf; --accent-soft: rgba(47,111,223,.15); --pos: #1a8f4c; --pos-soft: rgba(26,143,76,.12);
+  --neg: #c8372d; --neg-soft: rgba(200,55,45,.12); --warn: #b26b00; --warn-soft: rgba(178,107,0,.13); --star: #e0a800;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0f1216; --panel: #171b21; --panel2: #1e232b; --text: #e6e9ee; --muted: #8b95a3; --line: #2a3039;
+    --accent: #6c9cff; --accent-soft: rgba(108,156,255,.18); --pos: #4cc17f; --pos-soft: rgba(76,193,127,.15);
+    --neg: #ff6b5e; --neg-soft: rgba(255,107,94,.15); --warn: #f0a640; --warn-soft: rgba(240,166,64,.15); --star: #ffcc33;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0f1216; --panel: #171b21; --panel2: #1e232b; --text: #e6e9ee; --muted: #8b95a3; --line: #2a3039;
+  --accent: #6c9cff; --accent-soft: rgba(108,156,255,.18); --pos: #4cc17f; --pos-soft: rgba(76,193,127,.15);
+  --neg: #ff6b5e; --neg-soft: rgba(255,107,94,.15); --warn: #f0a640; --warn-soft: rgba(240,166,64,.15); --star: #ffcc33;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text);
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+main { max-width: 1180px; margin: 0 auto; padding: 24px 16px 48px; }
+h1 { font-size: 20px; margin: 0; }
+h2 { font-size: 15px; margin: 0 0 10px; }
+.sub { color: var(--muted); font-size: 12.5px; }
+.top { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.top .acts { display: flex; gap: 8px; }
+form { display: flex; gap: 8px; margin: 14px 0 10px; }
+input[type=text], #q { flex: 1; max-width: 420px; padding: 10px 12px; font-size: 16px; border-radius: 8px;
+  border: 1px solid var(--line); background: var(--panel); color: var(--text); text-transform: uppercase; }
+button { padding: 10px 18px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; font-size: 15px; cursor: pointer; }
+.ghost { background: transparent; color: var(--accent); border: 1px solid var(--accent); padding: 7px 14px; font-size: 13.5px; }
+.ghost:disabled { opacity: .5; cursor: default; }
+.small { padding: 5px 10px; font-size: 12.5px; }
+.switch { display: inline-flex; align-items: center; gap: 8px; background: transparent; color: var(--text); border: 1px solid var(--line);
+  padding: 6px 12px; font-size: 13.5px; }
+.switch .track { width: 32px; height: 18px; border-radius: 999px; background: var(--line); position: relative; transition: background .15s; }
+.switch .knob { position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--panel);
+  box-shadow: 0 1px 2px rgba(0,0,0,.3); transition: left .15s; }
+.switch[aria-checked="true"] .track { background: var(--pos); }
+.switch[aria-checked="true"] .knob { left: 16px; }
+select { padding: 7px 8px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--text); font-size: 13.5px; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.chip { border: 1px solid var(--line); background: var(--panel); color: var(--text); border-radius: 999px; padding: 4px 10px; font-size: 12.5px; cursor: pointer; }
+.chip.on { border-color: var(--accent); background: var(--accent-soft); }
+.msg { color: var(--muted); margin: 12px 0; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 16px; margin-top: 14px; }
+.title { font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 10px; margin-top: 14px; }
+.kpi { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+.kpi .l { color: var(--muted); font-size: 12px; }
+.kpi .v { font-size: 21px; font-weight: 650; font-variant-numeric: tabular-nums; }
+.kpi .s { font-size: 12px; color: var(--muted); }
+.pos { color: var(--pos); } .neg { color: var(--neg); }
+.chart { position: relative; height: 280px; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 820px) { .grid2 { grid-template-columns: 1fr; } }
+.tw { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; }
+th, td { padding: 6px 8px; border-bottom: 1px solid var(--line); text-align: right; white-space: nowrap; }
+th:first-child, td:first-child, td.n { text-align: left; }
+td.n { white-space: normal; }
+th { color: var(--muted); font-weight: 500; font-size: 12px; }
+tr.click { cursor: pointer; }
+tr.click:hover td { background: var(--accent-soft); }
+.tk { font-weight: 650; }
+.upd { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 10px 0; font-size: 13px; white-space: pre-wrap; }
+.upd button { margin: 8px 8px 0 0; padding: 6px 12px; font-size: 13px; }
+.tabs { display: flex; gap: 4px; margin: 16px 0 4px; box-shadow: inset 0 -1px 0 var(--line);
+  overflow-x: auto; overflow-y: hidden; scrollbar-width: none; }
+.tabs::-webkit-scrollbar { display: none; }
+.tab { background: transparent; color: var(--muted); border-radius: 8px 8px 0 0; padding: 8px 14px; font-size: 14px;
+  border: 1px solid transparent; border-bottom: 0; white-space: nowrap; flex: none; }
+.tab.on { color: var(--text); background: var(--panel); border-color: var(--line); }
+.ctrls { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: flex-end; margin-bottom: 10px; }
+.ctrls label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+.ctrls label.chk { flex-direction: row; align-items: center; gap: 6px; font-size: 13px; color: var(--text); }
+.ctrls .grow { flex: 1; }
+.star { background: transparent; border: 0; padding: 2px 4px; font-size: 20px; line-height: 1; color: var(--muted); cursor: pointer; }
+.star.on { color: var(--star); }
+.sgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; margin-top: 12px; }
+@media (max-width: 420px) { .sgrid { grid-template-columns: 1fr; } }
+.sg { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; cursor: pointer; display: flex; flex-direction: column; gap: 8px; }
+.sg:hover { border-color: var(--accent); }
+.sg-h { display: flex; align-items: center; gap: 8px; }
+.sg-h .rk { color: var(--muted); font-size: 12px; width: 18px; }
+.sg-h .tk { font-size: 17px; }
+.sg-h .nm { color: var(--muted); font-size: 12.5px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.score { font-size: 18px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+.bars { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 8px; align-items: center; font-size: 12px; color: var(--muted); }
+.bar { height: 6px; border-radius: 3px; background: var(--panel2); overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+.badges { display: flex; flex-wrap: wrap; gap: 5px; }
+.bd { font-size: 11.5px; padding: 2px 8px; border-radius: 999px; background: var(--panel2); color: var(--muted); }
+.bd.pos { background: var(--pos-soft); color: var(--pos); }
+.bd.neg { background: var(--neg-soft); color: var(--neg); }
+.bd.warn { background: var(--warn-soft); color: var(--warn); }
+.bd.acc { background: var(--accent-soft); color: var(--accent); }
+.bd.strong { background: var(--pos); color: var(--panel); font-weight: 600; }
+.sprow { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--muted); }
+.sg ul { margin: 0; padding-left: 18px; font-size: 12.5px; color: var(--muted); }
+.sg ul li { margin: 1px 0; }
+.disc { background: var(--warn-soft); color: var(--warn); border-radius: 8px; padding: 8px 12px; font-size: 12.5px; margin-top: 10px; }
+.notes { color: var(--muted); font-size: 12px; margin-top: 18px; }
+.notes li { margin: 3px 0; }
+.empty { color: var(--muted); padding: 18px 4px; }
+.idform { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-top: 8px; }
+.idform label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
+.idform input { padding: 8px 10px; font-size: 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel);
+  color: var(--text); text-transform: none; min-width: 220px; }
+.idform button { padding: 8px 14px; font-size: 14px; margin: 0; }
+.err { color: var(--neg); font-size: 12.5px; }
+.linkbtn { background: none; border: 0; padding: 0; color: var(--accent); font-size: inherit; cursor: pointer; text-decoration: underline; }
+</style>
+</head>
+<body>
+<main>
+  <div class="top">
+    <h1>🔥 Stocks on fire</h1>
+    <div class="acts">
+      <button type="button" class="ghost" id="theme" title="Cambiar tema">Tema: auto</button>
+      <button type="button" class="switch" id="autosw" role="switch" aria-checked="false" aria-label="Actualización automática">
+        <span class="track"><span class="knob"></span></span><span id="autolbl">Auto: no</span></button>
+      <button type="button" class="ghost" id="upd">Buscar actualizaciones</button>
+    </div>
+  </div>
+  <div class="upd" id="updmsg" hidden></div>
+  <div class="sub" id="meta">Número de gestoras institucionales (formulario 13F de la SEC) que declaran una acción.</div>
+  <section id="setup" hidden>
+    <div class="card">
+      <h2>Bienvenido a Stocks on fire</h2>
+      <p>Para empezar hay que descargar los datos públicos de la SEC: los informes 13F de las gestoras desde 2013 y las compras y ventas
+        de directivos desde 2006. Son unos <b>4 GB</b> y la primera vez tarda entre <b>30 y 60 minutos</b>. Después, las actualizaciones solo bajan lo nuevo.</p>
+      <p class="sub">Los datos se guardan en tu ordenador. La app funciona en local: no hay servidores ni cuentas.</p>
+      <div id="setup-id"></div>
+      <div id="setup-go" style="margin-top:12px"></div>
+    </div>
+  </section>
+  <div class="tabs" id="tabsbar">
+    <button type="button" class="tab" data-tab="sugerencias">🔥 Stocks on fire</button>
+    <button type="button" class="tab" data-tab="buscar">Buscar acción</button>
+    <button type="button" class="tab" data-tab="ranking">Ranking</button>
+    <button type="button" class="tab" data-tab="favoritos">Favoritos <span id="favn"></span></button>
+  </div>
+
+  <section id="sugerencias" hidden>
+    <div class="card">
+      <h2>Acciones con más interés institucional y mejor momento técnico</h2>
+      <div class="ctrls">
+        <label>Peso de la puntuación
+          <select id="s-profile">
+            <option value="13f" selected>Solo 13F (la más estable en el backtest)</option>
+            <option value="equilibrado">Equilibrado (60 % 13F · 40 % técnico)</option>
+            <option value="tecnico">Más técnico (40 % 13F · 60 % técnico)</option>
+          </select></label>
+        <label>Mínimo de gestoras hace un año
+          <select id="s-min"><option>50</option><option selected>100</option><option>250</option><option>500</option><option>1000</option></select></label>
+        <label>Liquidez mínima (volumen medio diario)
+          <select id="s-liq"><option value="0">Sin mínimo</option><option value="5">5 M$</option><option value="20" selected>20 M$</option>
+            <option value="50">50 M$</option><option value="100">100 M$</option><option value="500">500 M$</option></select></label>
+        <label>Mostrar
+          <select id="s-n"><option>10</option><option selected>20</option><option>30</option><option>50</option></select></label>
+        <label class="chk"><input type="checkbox" id="s-high"> Solo a ≤5 % del máximo de 52 semanas</label>
+        <label class="chk"><input type="checkbox" id="s-up"> Solo sobre la media de 200 sesiones</label>
+        <span class="grow"></span>
+        <button type="button" class="ghost small" id="s-csv">Exportar CSV</button>
+      </div>
+      <div class="sub" id="s-info"></div>
+      <div class="disc">Herramienta de investigación, no recomendación de inversión. Los datos 13F llegan con 1,5–4,5 meses de retraso; el análisis técnico es al último cierre.</div>
+      <details class="sub" style="margin-top:10px"><summary>Cómo se calcula la puntuación</summary>
+        <p><b>13F (0–100)</b>: percentiles dentro del universo de 25 % gestoras nuevas netas en 1 año, 20 % crecimiento % de gestoras,
+        25 % <b>aceleración</b> (gestoras netas de los 2 últimos trimestres menos las de los 2 anteriores, relativo a la base),
+        15 % aumento de acciones en manos de gestoras (ajustado por splits) y 15 % constancia (trimestres seguidos con más gestoras).</p>
+        <p><b>Técnico (0–100)</b>: 35 % cercanía al máximo de 52 semanas, 25 % tendencia (sobre la media de 200 y media de 50 sobre la de 200),
+        30 % fuerza relativa a 6 meses frente al S&amp;P 500 y 10 % ruptura de máximos de 52 semanas viva: cierre en máximo, o nuevo máximo en las últimas 10 sesiones sin haber caído más de un 5 % desde él.</p>
+        <p><b>Etiquetas de máximos</b>: <span class="bd strong">Cierre en máximo de 52 s</span> el último cierre es el más alto del año ·
+        <span class="bd pos">Nuevo máximo</span> marcó máximo hace poco y sigue a ≤5 % ·
+        <span class="bd warn">Ruptura devuelta</span> marcó máximo pero ya ha caído más de un 5 % ·
+        <span class="bd acc">Cerca de máximos</span> a ≤5 % sin ruptura reciente.</p>
+        <p>Se puntúan técnicamente las 120 mejores por 13F; ETF y fondos excluidos. Convicción, compradores/vendedores y volumen se muestran como información, pero no puntúan.</p>
+        <p><b>Backtest 2014–2026</b> (sin look-ahead: solo informes presentados en plazo, entrada tras el día 46; 49 trimestres, ~1.700 acciones por trimestre):
+        las 20 mejores por la parte 13F superaron a la media del universo en +4,4 puntos a 6 meses (t = 2,2; ganan el 64 % de los trimestres), pero
+        casi toda la ventaja está en 2022–2026 (+7,3) y es débil en 2014–2021. El mejor componente es la <b>aceleración</b>. La parte técnica no añade ventaja
+        (estar cerca de máximos incluso restó a 6 meses), y convicción y compradores/vendedores no mostraron señal. Repartida en quintiles, la puntuación no separa
+        bien: la ventaja solo aparece en el extremo superior. Hay sesgo de supervivencia (faltan precios del ~36 % de observaciones, sobre todo de empresas desaparecidas).</p>
+      </details>
+    </div>
+    <div class="sgrid" id="sgrid"></div>
+  </section>
+
+  <section id="buscar" hidden>
+    <form id="f">
+      <input id="q" placeholder="Ticker, CUSIP o nombre (p. ej. NVDA)" autocomplete="off">
+      <button>Buscar</button>
+    </form>
+    <div class="chips" id="cands"></div>
+    <div class="msg" id="msg"></div>
+    <div id="out" hidden>
+      <div class="card">
+        <div class="title"><span id="name"></span><span class="tk" id="dticker"></span>
+          <button type="button" class="star" id="dstar" title="Añadir a favoritos">☆</button></div>
+        <div class="sub" id="ident"></div>
+      </div>
+      <div class="kpis" id="kpis"></div>
+      <div class="card" id="techcard">
+        <h2 id="techh">Precio y técnico</h2>
+        <div class="kpis" id="tkpis" style="margin-top:0"></div>
+        <div class="chart" style="margin-top:14px"><canvas id="c3"></canvas></div>
+      </div>
+      <div class="card" id="inscard">
+        <h2 id="insh">Directivos (formulario 4)</h2>
+        <div class="kpis" id="ikpis" style="margin-top:0"></div>
+        <div class="chart" style="margin-top:14px;height:220px"><canvas id="c4"></canvas></div>
+        <div class="tw" style="margin-top:12px"><table id="it"></table></div>
+        <div class="sub" style="margin-top:8px">Compras y ventas en mercado abierto declaradas en el formulario 4 (se publican en unos 2 días).
+          El resumen y el gráfico cuentan solo personas: CEO, CFO, directivos y consejeros. «Plan» es una venta programada con antelación (regla 10b5-1), que dice poco sobre la opinión del directivo.
+          Es información, no una señal: el backtest 2006–2026 no encontró ventaja en seguir las compras de directivos.</div>
+      </div>
+      <div class="card"><h2>Gestoras que la declaran, por trimestre</h2><div class="chart"><canvas id="c1"></canvas></div></div>
+      <div class="card"><h2>Por año (último trimestre disponible de cada año)</h2><div class="tw"><table id="yt"></table></div></div>
+      <div class="card"><h2>Valor total declarado (miles de millones $)</h2><div class="chart"><canvas id="c2"></canvas></div></div>
+      <div class="grid2">
+        <div class="card"><h2 id="hh">Mayores tenedores</h2><div class="tw"><table id="ht"></table></div></div>
+        <div class="card"><h2 id="ch">Entradas y salidas</h2><div class="tw"><table id="nt"></table></div><div class="tw" style="margin-top:12px"><table id="xt"></table></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="ranking" hidden>
+    <div class="card">
+      <h2>Acciones con más interés y compras de las gestoras</h2>
+      <div class="ctrls">
+        <label>Criterio
+          <select id="r-metric">
+            <option value="netas">Gestoras nuevas netas</option>
+            <option value="pct">Crecimiento de gestoras (%)</option>
+            <option value="acciones">Aumento de acciones en manos de gestoras (%)</option>
+            <option value="combinado">Combinado: % gestoras + % acciones</option>
+          </select></label>
+        <label>Periodo
+          <select id="r-h"><option value="4">Último año</option><option value="1">Último trimestre</option></select></label>
+        <label>Mínimo de gestoras al inicio
+          <select id="r-min"><option>25</option><option>50</option><option selected>100</option><option>250</option><option>500</option><option>1000</option></select></label>
+        <label>Mostrar
+          <select id="r-n"><option selected>10</option><option>25</option><option>50</option></select></label>
+        <label class="chk"><input type="checkbox" id="r-stocks" checked> Solo acciones (sin ETF ni fondos)</label>
+        <span class="grow"></span>
+        <button type="button" class="ghost small" id="r-csv">Exportar CSV</button>
+      </div>
+      <div class="sub" id="r-info"></div>
+      <div class="tw"><table id="rt"></table></div>
+      <div class="sub" id="r-help" style="margin-top:10px"></div>
+    </div>
+  </section>
+
+  <section id="favoritos" hidden>
+    <div class="card">
+      <div class="ctrls" style="margin-bottom:4px">
+        <h2 style="margin:0">Tus favoritos</h2><span class="grow"></span>
+        <button type="button" class="ghost small" id="f-csv">Exportar CSV</button>
+      </div>
+      <div class="sub">Se guardan en este navegador. Añádelos con la estrella ☆ en Stocks on fire, en el ranking o en la ficha de una acción.</div>
+      <div class="tw" style="margin-top:10px"><table id="ft"></table></div>
+    </div>
+  </section>
+
+  <div class="sub" id="idline" style="margin-top:18px"></div>
+  <ul class="notes">
+    <li>Cuenta <b>gestoras</b> con más de 100 M$ que presentan el 13F (BlackRock, Vanguard, hedge funds, bancos…), no fondos individuales. Solo posiciones largas en acciones de EE. UU.; se excluyen opciones.</li>
+    <li>El 13F se publica hasta 45 días después del cierre del trimestre. La columna «a +45 d» cuenta solo las gestoras que ya habían presentado en ese plazo: es lo que se podía saber en tiempo real (úsala en backtests).</li>
+    <li>Precios diarios de Yahoo Finance (se renuevan cada 6 horas). Las acciones declaradas en el 13F no están ajustadas por splits; los rankings sí lo corrigen.</li>
+  </ul>
+</main>
+<script>
+const $ = s => document.querySelector(s);
+const fmt = n => n == null ? "—" : Math.round(n).toLocaleString("es-ES");
+const fmtB = n => n == null ? "—" : (n / 1e9).toLocaleString("es-ES", {maximumFractionDigits: n >= 1e10 ? 0 : 2});
+const fmtM = n => n == null ? "—" : (n / 1e6).toLocaleString("es-ES", {maximumFractionDigits: 1});
+const fmtP = n => n == null ? "—" : n.toLocaleString("es-ES", {minimumFractionDigits: 2, maximumFractionDigits: 2});
+const sign = (n, d = 0) => n == null ? "—" : (n > 0 ? "+" : "") + n.toLocaleString("es-ES", {maximumFractionDigits: d});
+const pct = (n, d = 0) => n == null ? "—" : sign(n, d) + " %";
+const cls = n => n > 0 ? "pos" : n < 0 ? "neg" : "";
+const qlabel = p => p.slice(0, 4) + " T" + (Math.floor((+p.slice(5, 7) - 1) / 3) + 1);
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"}[c]));
+const css = v => getComputedStyle(document.documentElement).getPropertyValue(v).trim();
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} },
+};
+let charts = [], current = null, lastSug = [], lastRank = [], lastFav = [];
+
+/* ---------- tema ---------- */
+const THEMES = ["auto", "light", "dark"], TNAME = {auto: "auto", light: "claro", dark: "oscuro"};
+function applyTheme(t) {
+  if (t === "auto") delete document.documentElement.dataset.theme; else document.documentElement.dataset.theme = t;
+  $("#theme").textContent = "Tema: " + TNAME[t];
+  try { localStorage.setItem("tema13f", t); } catch (e) {}
+  if (current) show(current.cusip, true);
+}
+$("#theme").onclick = () => {
+  const cur = document.documentElement.dataset.theme || "auto";
+  applyTheme(THEMES[(THEMES.indexOf(cur) + 1) % 3]);
+};
+$("#theme").textContent = "Tema: " + TNAME[document.documentElement.dataset.theme || "auto"];
+matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (current) show(current.cusip, true); });
+
+/* ---------- favoritos ---------- */
+const favs = () => store.get("fav13f", []);
+const isFav = c => favs().some(f => f.cusip === c);
+function toggleFav(item) {
+  let f = favs();
+  f = f.some(x => x.cusip === item.cusip) ? f.filter(x => x.cusip !== item.cusip) : [...f, item];
+  store.set("fav13f", f); updFavCount();
+  document.querySelectorAll(`.star[data-c="${item.cusip}"]`).forEach(b => paintStar(b, item.cusip));
+  if (current && current.cusip === item.cusip) paintStar($("#dstar"), item.cusip);
+}
+function paintStar(b, c) { const on = isFav(c); b.classList.toggle("on", on); b.textContent = on ? "★" : "☆"; b.title = on ? "Quitar de favoritos" : "Añadir a favoritos"; }
+function updFavCount() { const n = favs().length; $("#favn").textContent = n ? `(${n})` : ""; }
+updFavCount();
+
+/* ---------- utilidades ---------- */
+function spark(vals, w = 110, h = 30) {
+  if (!vals || vals.length < 2) return "";
+  const mn = Math.min(...vals), mx = Math.max(...vals), r = mx - mn || 1;
+  const pts = vals.map((v, i) => [i * (w - 6) / (vals.length - 1) + 3, h - 4 - (v - mn) / r * (h - 8)]);
+  const up = vals[vals.length - 1] >= vals[0];
+  const col = up ? "var(--pos)" : "var(--neg)";
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" aria-hidden="true"><polyline fill="none" stroke="${col}" stroke-width="1.8"
+    stroke-linejoin="round" points="${pts.map(p => p.join(",")).join(" ")}"/><circle cx="${pts.at(-1)[0]}" cy="${pts.at(-1)[1]}" r="2.6" fill="${col}"/></svg>`;
+}
+function highBadge(x) {
+  if (x.pct_from_high == null) return null;
+  if (x.close_high) return ["Cierre en máximo de 52 s", "strong"];
+  const d = x.days_since_high, cuando = d === 0 ? "hoy" : d === 1 ? "hace 1 sesión" : `hace ${d} sesiones`;
+  const ahora = `ahora ${pct(x.pct_from_high, 1)}`;
+  if (x.breakout && x.pct_from_high >= -5) return [`Nuevo máximo ${cuando} · ${ahora}`, "pos"];
+  if (x.breakout) return [`Ruptura devuelta: máximo ${cuando} · ${ahora}`, "warn"];
+  if (x.pct_from_high >= -5) return [`Cerca de máximos · ${pct(x.pct_from_high, 1)}`, "acc"];
+  return null;
+}
+function volBadge(x) {
+  if (x.vol_ratio == null || x.vol_ratio < 1.5) return null;
+  const live = x.close_high || (x.breakout && x.pct_from_high >= -5);
+  const v = "×" + x.vol_ratio.toLocaleString("es-ES", {maximumFractionDigits: 1});
+  return live ? [`Ruptura con volumen ${v}`, "pos"] : [`Volumen ${v} su media`, "acc"];
+}
+function flowBadge(x) {
+  if (x.buyers == null || x.buyers + x.sellers < 20) return null;
+  if (x.buyers >= 1.2 * x.sellers) return [`Compran ${x.buyers} / venden ${x.sellers}`, "pos"];
+  if (x.sellers >= 1.2 * x.buyers) return [`Venden ${x.sellers} / compran ${x.buyers}`, "warn"];
+  return null;
+}
+const fmtLiq = v => v == null ? "—" : v >= 1e9 ? (v / 1e9).toLocaleString("es-ES", {maximumFractionDigits: 1}) + " B$" : Math.round(v / 1e6).toLocaleString("es-ES") + " M$";
+const fmtMoney = v => !v ? "0 $" : v >= 1e9 ? (v / 1e9).toLocaleString("es-ES", {maximumFractionDigits: 2}) + " B$"
+  : v >= 1e6 ? (v / 1e6).toLocaleString("es-ES", {maximumFractionDigits: 1}) + " M$"
+  : Math.round(v / 1e3).toLocaleString("es-ES") + " k$";
+const badgeHTML = b => b ? `<span class="bd ${b[1]}">${esc(b[0])}</span>` : "";
+
+function downloadCSV(name, rows, cols) {
+  if (!rows.length) return;
+  const q = v => { const s = v == null ? "" : typeof v === "number" ? String(Math.round(v * 100) / 100).replace(".", ",") : String(v); return /[";\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+  const csv = "\ufeff" + [cols.map(c => c[1]).join(";"), ...rows.map(r => cols.map(c => q(typeof c[0] === "function" ? c[0](r) : r[c[0]])).join(";"))].join("\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], {type: "text/csv;charset=utf-8"}));
+  a.download = name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+function openDetail(cusip, label) {
+  setTab("buscar"); $("#q").value = label || cusip; search(cusip, label);
+  window.scrollTo({top: 0, behavior: "smooth"});
+}
+
+/* ---------- pestañas ---------- */
+document.querySelectorAll(".tab").forEach(b => b.onclick = () => setTab(b.dataset.tab));
+function setTab(name) {
+  document.querySelectorAll(".tab").forEach(b => b.classList.toggle("on", b.dataset.tab === name));
+  ["sugerencias", "buscar", "ranking", "favoritos"].forEach(s => $("#" + s).hidden = s !== name);
+  store.set("tab13f", name);
+  if (name === "sugerencias" && !$("#sgrid").innerHTML) loadSug();
+  if (name === "ranking" && !$("#rt").innerHTML) loadRanking();
+  if (name === "favoritos") loadFavs();
+  if (name === "buscar") setTimeout(() => $("#q").focus(), 0);
+}
+
+/* ---------- buscar ---------- */
+$("#f").addEventListener("submit", e => { e.preventDefault(); search($("#q").value); });
+
+async function search(q, label) {
+  q = q.trim(); if (!q) return;
+  history.replaceState(null, "", "#" + encodeURIComponent((label || q).toUpperCase()));
+  $("#msg").textContent = "Buscando…"; $("#cands").innerHTML = ""; $("#out").hidden = true;
+  const r = await fetch("/api/search?q=" + encodeURIComponent(q)).then(r => r.json());
+  if (r.error) { $("#msg").textContent = "Error: " + r.error; return; }
+  if (!r.candidates.length) {
+    $("#msg").textContent = "Sin resultados" + (r.title ? ` para ${r.title}` : "") + ". Prueba con el CUSIP o parte del nombre.";
+    return;
+  }
+  $("#msg").textContent = r.candidates.length > 1 ? "Varias coincidencias; se muestra la más declarada. Pulsa otra para cambiar:" : "";
+  if (r.candidates.length > 1) {
+    $("#cands").innerHTML = r.candidates.map((c, i) =>
+      `<button class="chip${i ? "" : " on"}" data-c="${c.cusip}">${esc(c.name)} · ${esc(c.title_class)} · ${c.cusip} · ${fmt(c.n_filers)}</button>`).join("");
+    $("#cands").querySelectorAll(".chip").forEach(b => b.onclick = () => {
+      $("#cands").querySelectorAll(".chip").forEach(x => x.classList.remove("on")); b.classList.add("on"); show(b.dataset.c);
+    });
+  }
+  show(r.candidates[0].cusip);
+}
+
+async function show(cusip, redraw) {
+  let d = current && current.cusip === cusip && redraw ? current.d : null;
+  let tech = current && current.cusip === cusip && redraw ? current.tech : null;
+  let ins = current && current.cusip === cusip && redraw ? current.ins : null;
+  if (!d) {
+    [d, tech, ins] = await Promise.all([
+      fetch("/api/security?cusip=" + cusip).then(r => r.json()),
+      fetch("/api/tech?cusip=" + cusip).then(r => r.json()).catch(() => null),
+      fetch("/api/insiders?cusip=" + cusip).then(r => r.json()).catch(() => null),
+    ]);
+  }
+  if (d.error) { $("#msg").textContent = "Error: " + d.error; return; }
+  current = {cusip, d, tech, ins};
+  $("#out").hidden = false;
+  $("#meta").textContent = `Datos SEC hasta el trimestre ${qlabel(d.last_period)} · base construida ${d.built_at}`;
+  $("#name").textContent = d.name;
+  const ticker = tech && tech.ticker;
+  $("#dticker").textContent = ticker || "";
+  $("#ident").textContent = `CUSIP ${d.cusip} · ${d.title_class}`;
+  const st = $("#dstar"); st.dataset.c = cusip; paintStar(st, cusip);
+  st.onclick = () => toggleFav({cusip, ticker: ticker || null, name: d.name});
+
+  const q = d.quarterly, last = q[q.length - 1] || {}, prev = q[q.length - 2] || {};
+  const yago = q.find(x => last.period && x.period === (+last.period.slice(0, 4) - 1) + last.period.slice(4)) || {};
+  const diff = (a, b) => a == null || b == null ? null : a - b;
+  const qd = diff(last.n_filers, prev.n_filers), yd = diff(last.n_filers, yago.n_filers);
+  $("#kpis").innerHTML = [
+    ["Gestoras " + (last.period ? qlabel(last.period) : ""), fmt(last.n_filers), `a +45 d: ${fmt(last.n_on_time)}`],
+    ["vs trimestre anterior", `<span class="${cls(qd)}">${sign(qd)}</span>`, prev.n_filers ? pct(qd / prev.n_filers * 100, 1) : ""],
+    ["vs hace un año", `<span class="${cls(yd)}">${sign(yd)}</span>`, yago.n_filers ? pct(yd / yago.n_filers * 100, 1) : ""],
+    ["Valor declarado", fmtB(last.value) + " B$", ""],
+    ["Entradas / salidas", `<span class="pos">${fmt(d.n_new)}</span> / <span class="neg">${fmt(d.n_exits)}</span>`, d.holders_period ? qlabel(d.holders_period) : ""],
+  ].map(([l, v, s]) => `<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join("");
+
+  $("#yt").innerHTML = "<tr><th>Año</th><th>Trim.</th><th>Gestoras</th><th>Δ</th><th>Δ %</th><th>a +45 d</th><th>Valor B$</th></tr>" +
+    d.yearly.slice().reverse().map(y => `<tr><td>${y.year}</td><td>${y.quarter}</td><td>${fmt(y.n_filers)}</td>
+      <td class="${cls(y.delta)}">${sign(y.delta)}</td><td class="${cls(y.pct)}">${pct(y.pct, 1)}</td>
+      <td>${fmt(y.n_on_time)}</td><td>${fmtB(y.value)}</td></tr>`).join("");
+
+  $("#hh").textContent = "Mayores tenedores " + (d.holders_period ? qlabel(d.holders_period) : "");
+  $("#ht").innerHTML = "<tr><th>Gestora</th><th>Acciones (M)</th><th>Valor M$</th></tr>" +
+    d.holders.map(h => `<tr><td class="n">${esc(h.name || h.cik)}</td><td>${fmtM(h.shares)}</td><td>${fmt(h.value / 1e6)}</td></tr>`).join("");
+  $("#ch").textContent = "Entradas y salidas " + (d.holders_period ? qlabel(d.holders_period) : "");
+  const rows = (list, label, c) => `<tr><th>${label}</th><th>Valor M$</th></tr>` + (list.length
+    ? list.map(h => `<tr><td class="n ${c}">${esc(h.name || h.cik)}</td><td>${fmt(h.value / 1e6)}</td></tr>`).join("")
+    : `<tr><td class="n">—</td><td></td></tr>`);
+  $("#nt").innerHTML = rows(d.new, `Nuevas (${fmt(d.n_new)}, mayores 15)`, "pos");
+  $("#xt").innerHTML = rows(d.exits, `Salen (${fmt(d.n_exits)}, mayores 15)`, "neg");
+
+  const t = tech && tech.tech;
+  $("#techcard").hidden = !t;
+  if (t) {
+    $("#techh").textContent = `Precio y técnico (${tech.ticker}, cierre ${t.date})`;
+    const ma = t.above_sma200 == null ? "—" : t.above_sma200 ? '<span class="pos">Por encima</span>' : '<span class="neg">Por debajo</span>';
+    $("#tkpis").innerHTML = [
+      ["Último cierre", fmtP(t.close) + " $", `rango 52 s: ${fmtP(t.low52)} – ${fmtP(t.high52)}`],
+      ["Distancia al máximo 52 s", `<span class="${t.pct_from_high >= -5 ? "pos" : ""}">${pct(t.pct_from_high, 1)}</span>`,
+        badgeHTML(highBadge(t)) || `máximo hace ${t.days_since_high} sesiones`],
+      ["Media de 200 sesiones", ma, t.trend_up == null ? "" : t.trend_up ? "media 50 > media 200" : "media 50 < media 200"],
+      ["Rentabilidad 6 m / 12 m", `<span class="${cls(t.ret_6m)}">${pct(t.ret_6m)}</span>`, `12 m: ${pct(t.ret_12m)}`],
+      ["Fuerza relativa 6 m", `<span class="${cls(t.rs_6m)}">${sign(t.rs_6m)} pt</span>`, "frente al S&P 500 (SPY)"],
+    ].map(([l, v, s]) => `<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join("");
+  }
+
+  charts.forEach(c => c.destroy());
+  const labels = q.map(x => qlabel(x.period));
+  const grid = {color: css("--line")}, ticks = {color: css("--muted")};
+  const opts = {responsive: true, maintainAspectRatio: false, interaction: {mode: "index", intersect: false},
+    plugins: {legend: {labels: {color: css("--muted")}}},
+    scales: {x: {grid, ticks: {...ticks, maxRotation: 0, autoSkipPadding: 12}}, y: {grid, ticks, beginAtZero: true}}};
+  charts = [
+    new Chart($("#c1"), {type: "bar", data: {labels, datasets: [
+      {label: "Gestoras", data: q.map(x => x.n_filers), backgroundColor: css("--accent")},
+      {label: "Conocidas a +45 d", data: q.map(x => x.n_on_time), type: "line", borderColor: css("--muted"),
+       pointRadius: 0, borderWidth: 1.5, borderDash: [4, 3]}]}, options: opts}),
+    new Chart($("#c2"), {type: "line", data: {labels, datasets: [
+      {label: "Valor B$", data: q.map(x => x.value / 1e9), borderColor: css("--accent"), backgroundColor: css("--accent-soft"),
+       fill: true, pointRadius: 0, borderWidth: 2}]}, options: opts}),
+  ];
+  const hasIns = ins && !ins.error && ins.rows;
+  $("#inscard").hidden = !hasIns;
+  if (hasIns) {
+    $("#insh").textContent = `Directivos (formulario 4) · ${ins.ticker}${ins.issuer ? " · " + ins.issuer : ""}`;
+    const s12 = ins.summary["12m"] || {buy: {}, sell: {}}, s3 = ins.summary["3m"] || {buy: {}, sell: {}};
+    const net = (s12.buy.value || 0) - (s12.sell.value || 0);
+    $("#ikpis").innerHTML = ins.rows.length ? [
+      ["Compran (12 meses)", `<span class="${s12.buy.value ? "pos" : ""}">${fmtMoney(s12.buy.value)}</span>`, `${s12.buy.people || 0} personas · ${s12.buy.n || 0} operaciones`],
+      ["Venden (12 meses)", `<span class="${s12.sell.value ? "neg" : ""}">${fmtMoney(s12.sell.value)}</span>`,
+        `${s12.sell.people || 0} personas${s12.sell.plan_value ? ` · ${Math.round(s12.sell.plan_value / s12.sell.value * 100)} % en plan` : ""}`],
+      ["Neto 12 meses", `<span class="${cls(net)}">${net > 0 ? "+" : net < 0 ? "−" : ""}${fmtMoney(Math.abs(net))}</span>`, "compras − ventas"],
+      ["Últimos 3 meses", `<span class="pos">${fmtMoney(s3.buy.value)}</span> / <span class="neg">${fmtMoney(s3.sell.value)}</span>`,
+        `compran ${s3.buy.people || 0} · venden ${s3.sell.people || 0} personas`],
+    ].map(([l, v, s]) => `<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join("")
+      : '<div class="empty">Sin compras ni ventas de directivos en mercado abierto en los últimos 24 meses.</div>';
+    $("#it").innerHTML = ins.rows.length ? `<tr><th>Publicado</th><th>Persona</th><th>Cargo</th><th>Operación</th><th>Acciones</th>
+      <th>Precio</th><th>Importe</th><th>Participación</th></tr>` + ins.rows.map(x => `<tr>
+      <td>${x.filing_date}</td><td class="n">${esc(x.owner)}</td><td class="n">${esc(x.title || x.role)}</td>
+      <td>${x.code === "P" ? '<span class="bd pos">Compra</span>' : '<span class="bd neg">Venta</span>'}${x.plan_10b51 ? ' <span class="bd">plan</span>' : ""}</td>
+      <td>${fmt(x.shares)}</td><td>${fmtP(x.price)}</td><td>${fmtMoney(x.value)}</td>
+      <td class="${cls(x.pct_change)}">${x.pct_change == null ? "—" : pct(x.pct_change, 1)}</td></tr>`).join("") : "";
+  }
+
+  if (hasIns && ins.monthly.length && ins.rows.length) {
+    charts.push(new Chart($("#c4"), {type: "bar", data: {labels: ins.monthly.map(m => m.m), datasets: [
+      {label: "Compras (M$)", data: ins.monthly.map(m => m.buy / 1e6), backgroundColor: css("--pos")},
+      {label: "Ventas (M$)", data: ins.monthly.map(m => -m.sell / 1e6), backgroundColor: css("--neg")}]},
+      options: {...opts, scales: {x: {grid, stacked: true, ticks: {...ticks, maxRotation: 0, autoSkipPadding: 12}},
+        y: {grid, ticks, stacked: true}}}}));
+  }
+
+  if (t && tech.series.length) {
+    const s = tech.series;
+    let qi = -1;
+    const filersAt = s.map(p => { while (qi + 1 < q.length && q[qi + 1].period <= p.d) qi++; return qi >= 0 ? q[qi].n_filers : null; });
+    charts.push(new Chart($("#c3"), {type: "line", data: {labels: s.map(p => p.d), datasets: [
+      {label: "Precio ($, semanal)", data: s.map(p => p.c), borderColor: css("--accent"), pointRadius: 0, borderWidth: 1.8, yAxisID: "y"},
+      {label: "Gestoras 13F", data: filersAt, borderColor: css("--pos"), backgroundColor: css("--pos-soft"), fill: true,
+       stepped: true, pointRadius: 0, borderWidth: 1.5, yAxisID: "y1"}]},
+      options: {...opts, scales: {x: {grid, ticks: {...ticks, maxRotation: 0, autoSkipPadding: 24, callback(v) { return this.getLabelForValue(v).slice(0, 7); }}},
+        y: {grid, ticks, position: "left"}, y1: {grid: {drawOnChartArea: false}, ticks, position: "right", beginAtZero: true}}}}));
+  }
+}
+
+/* ---------- sugerencias ---------- */
+["#s-profile", "#s-min", "#s-liq", "#s-n", "#s-high", "#s-up"].forEach(id => $(id).onchange = loadSug);
+let sugSeq = 0;
+async function loadSug() {
+  const seq = ++sugSeq;
+  const qs = new URLSearchParams({profile: $("#s-profile").value, min: $("#s-min").value, n: $("#s-n").value, liq: $("#s-liq").value,
+    high: $("#s-high").checked ? "1" : "0", up: $("#s-up").checked ? "1" : "0"});
+  $("#s-info").textContent = "Calculando… (la primera vez descarga precios y tarda unos segundos)";
+  const r = await fetch("/api/suggest?" + qs).then(r => r.json()).catch(e => ({error: e.message}));
+  if (seq !== sugSeq) return;
+  if (r.error) { $("#s-info").textContent = r.error; $("#sgrid").innerHTML = ""; return; }
+  lastSug = r.rows;
+  const qs5 = (r.quarters || []).map(qlabel);
+  $("#s-info").textContent = `13F: ${qs5[0] || ""} → ${qs5.at(-1) || ""} · precios al ${r.price_date} · ${r.rows.length} resultados`;
+  if (!r.rows.length) { $("#sgrid").innerHTML = '<div class="empty">Ninguna acción cumple los filtros.</div>'; return; }
+  $("#sgrid").innerHTML = r.rows.map((x, i) => {
+    const acc = x.d_recent > x.d_prior && x.d_recent > 0;
+    const badges = [
+      acc ? ["Acelerando", "pos"] : x.d_recent < x.d_prior ? ["Frenando", "warn"] : null,
+      x.consistency === 4 ? ["4/4 trimestres al alza", "acc"] : null,
+      highBadge(x),
+      volBadge(x),
+      flowBadge(x),
+      x.above_sma200 == null ? null : x.above_sma200 ? ["Sobre media 200", "pos"] : ["Bajo media 200", "neg"],
+      x.rs_6m != null ? [`FR 6m ${sign(x.rs_6m)}`, x.rs_6m > 0 ? "pos" : "neg"] : null,
+      x.split && x.split !== 1 ? [`split ${x.split >= 1 ? x.split + "×1" : "1×" + Math.round(1 / x.split)}`, ""] : null,
+    ].filter(Boolean);
+    return `<div class="sg" data-c="${x.cusip}" data-t="${esc(x.ticker)}">
+      <div class="sg-h"><span class="rk">${i + 1}</span><span class="tk">${esc(x.ticker)}</span><span class="nm" title="${esc(x.name)}">${esc(x.name)}</span>
+        <span class="score" title="Puntuación global">${Math.round(x.score)}</span>
+        <button type="button" class="star" data-c="${x.cusip}">☆</button></div>
+      <div class="bars"><span>13F</span><div class="bar"><i style="width:${x.s13}%"></i></div><span>${Math.round(x.s13)}</span>
+        <span>Técnico</span><div class="bar"><i style="width:${x.stech}%"></i></div><span>${Math.round(x.stech)}</span></div>
+      <div class="sprow">${spark(x.spark.slice(-5))}<span>${fmt(x.n_before)} → <b style="color:var(--text)">${fmt(x.n_now)}</b> gestoras ·
+        ${fmtP(x.close)} $ · ${pct(x.pct_from_high, 1)} del máx. intradía · ${fmtLiq(x.dollar_vol)}/día</span></div>
+      <div class="badges">${badges.map(([t, c]) => `<span class="bd ${c}">${esc(t)}</span>`).join("")}</div>
+      <ul>${x.reasons.map(t => `<li>${esc(t)}</li>`).join("")}</ul>
+    </div>`;
+  }).join("");
+  $("#sgrid").querySelectorAll(".sg").forEach(el => {
+    const x = r.rows.find(y => y.cusip === el.dataset.c);
+    const st = el.querySelector(".star"); paintStar(st, x.cusip);
+    st.onclick = e => { e.stopPropagation(); toggleFav({cusip: x.cusip, ticker: x.ticker, name: x.name}); };
+    el.onclick = () => openDetail(x.cusip, x.ticker);
+  });
+}
+$("#s-csv").onclick = () => downloadCSV("stocks_on_fire.csv", lastSug, [
+  [(r) => lastSug.indexOf(r) + 1, "#"], ["ticker", "Ticker"], ["name", "Empresa"], ["score", "Puntuación"], ["s13", "13F"], ["stech", "Técnico"],
+  ["n_before", "Gestoras hace 1 año"], ["n_now", "Gestoras ahora"], ["d_filers", "Netas 1 año"], ["pct_filers", "% gestoras"],
+  ["d_recent", "Netas 2 últimos T"], ["d_prior", "Netas 2 T anteriores"], ["consistency", "Trimestres al alza (de 4)"],
+  ["pct_shares", "% acciones en manos de gestoras"], ["entries_conv", "Entradas con convicción"], ["buyers", "Compran"],
+  ["sellers", "Venden"], ["close", "Precio"], ["pct_from_high", "% desde máx. 52 s"], ["vol_ratio", "Volumen 10d / 50d"],
+  [(r) => r.dollar_vol / 1e6, "Volumen medio M$/día"],
+  [(r) => r.breakout ? "sí" : "no", "Ruptura 10 sesiones"], [(r) => r.above_sma200 ? "sí" : "no", "Sobre media 200"],
+  ["ret_6m", "Rent. 6 m %"], ["rs_6m", "FR 6 m vs SPY"], ["cusip", "CUSIP"]]);
+
+/* ---------- ranking ---------- */
+const HELP = {
+  netas: "Gestoras que la tienen ahora menos las que la tenían al inicio. Es la medida más fiable de «interés»: favorece a empresas grandes que entran en muchas carteras a la vez.",
+  pct: "Crecimiento porcentual del número de gestoras. Favorece a valores pequeños: sube el mínimo de gestoras al inicio para filtrar ruido.",
+  acciones: "Cambio en el total de acciones en manos de gestoras 13F, ajustado por splits. Ojo: también sube si la empresa emite acciones nuevas (ampliaciones, compras pagadas con acciones), no solo por compras.",
+  combinado: "Media del percentil en crecimiento de gestoras y en aumento de acciones: premia a valores donde entran gestoras nuevas y además se acumulan acciones.",
+};
+["#r-metric", "#r-h", "#r-min", "#r-n", "#r-stocks"].forEach(id => $(id).onchange = loadRanking);
+let rankSeq = 0;
+async function loadRanking() {
+  const seq = ++rankSeq;
+  const metric = $("#r-metric").value;
+  const qs = new URLSearchParams({metric, h: $("#r-h").value, min: $("#r-min").value, n: $("#r-n").value,
+    stocks: $("#r-stocks").checked ? "1" : "0"});
+  $("#r-info").textContent = "Calculando…"; $("#r-help").textContent = HELP[metric];
+  const r = await fetch("/api/ranking?" + qs).then(r => r.json());
+  if (seq !== rankSeq) return;
+  if (r.error) { $("#r-info").textContent = r.error; $("#rt").innerHTML = ""; return; }
+  lastRank = r.rows;
+  $("#r-info").textContent = r.period ? `Comparación ${qlabel(r.base_period)} → ${qlabel(r.period)}. Pulsa una fila para ver el detalle.` : "";
+  const hl = k => metric === k ? ' style="font-weight:650"' : "";
+  $("#rt").innerHTML = `<tr><th>#</th><th>Ticker</th><th>Empresa</th><th>Gestoras antes</th><th>ahora</th>
+    <th>Netas</th><th>%</th><th>Entran / salen</th><th title="Entradas con más del 1 % de la cartera de la gestora">Con convicción</th>
+    <th title="Entre las gestoras que ya la tenían">Compran / venden</th><th>Acciones %</th><th>Valor B$</th><th></th></tr>` +
+    r.rows.map((x, i) => `<tr class="click" data-c="${x.cusip}" data-t="${esc(x.ticker || x.cusip)}">
+      <td>${i + 1}</td><td class="tk">${esc(x.ticker || "—")}</td>
+      <td class="n">${esc(x.name)}${x.split !== 1 ? ` <span class="sub">(split ${x.split >= 1 ? x.split + "×1" : "1×" + Math.round(1 / x.split)})</span>` : ""}</td>
+      <td>${fmt(x.n_before)}</td><td>${fmt(x.n_now)}</td>
+      <td class="${cls(x.d_filers)}"${hl("netas")}>${sign(x.d_filers)}</td>
+      <td class="${cls(x.pct_filers)}"${hl("pct")}>${pct(x.pct_filers, 1)}</td>
+      <td><span class="pos">${fmt(x.entries)}</span> / <span class="neg">${fmt(x.exits)}</span></td>
+      <td>${fmt(x.entries_conv)}</td>
+      <td><span class="${x.buyers > x.sellers ? "pos" : ""}">${fmt(x.buyers)}</span> / <span class="${x.sellers > x.buyers ? "neg" : ""}">${fmt(x.sellers)}</span></td>
+      <td class="${cls(x.pct_shares)}"${hl("acciones")}>${pct(x.pct_shares, 1)}</td>
+      <td>${fmtB(x.value_now)}</td><td><button type="button" class="star" data-c="${x.cusip}">☆</button></td></tr>`).join("");
+  $("#rt").querySelectorAll("tr.click").forEach(tr => {
+    const x = r.rows.find(y => y.cusip === tr.dataset.c);
+    const st = tr.querySelector(".star"); paintStar(st, x.cusip);
+    st.onclick = e => { e.stopPropagation(); toggleFav({cusip: x.cusip, ticker: x.ticker, name: x.name}); };
+    tr.onclick = () => openDetail(x.cusip, x.ticker || x.cusip);
+  });
+}
+$("#r-csv").onclick = () => downloadCSV("ranking_13f.csv", lastRank, [
+  ["ticker", "Ticker"], ["name", "Empresa"], ["n_before", "Gestoras antes"], ["n_now", "Gestoras ahora"], ["d_filers", "Netas"],
+  ["pct_filers", "% gestoras"], ["entries", "Entran"], ["exits", "Salen"], ["entries_conv", "Entradas con convicción"],
+  ["buyers", "Compran"], ["sellers", "Venden"], ["pct_shares", "% acciones"], ["split", "Split"],
+  [(r) => r.value_now / 1e9, "Valor B$"], ["cusip", "CUSIP"]]);
+
+/* ---------- favoritos ---------- */
+async function loadFavs() {
+  const f = favs();
+  if (!f.length) { lastFav = []; $("#ft").innerHTML = '<tr><td class="empty">Aún no tienes favoritos.</td></tr>'; return; }
+  $("#ft").innerHTML = '<tr><td class="empty">Cargando…</td></tr>';
+  const r = await fetch("/api/watch?cusips=" + f.map(x => x.cusip).join(",")).then(r => r.json());
+  lastFav = r.rows;
+  $("#ft").innerHTML = `<tr><th>Ticker</th><th>Empresa</th><th>Gestoras (5 T)</th><th>ahora</th><th>Netas 1 año</th>
+    <th>2 últimos T vs 2 anteriores</th><th>Precio</th><th>Desde máx. 52 s</th><th>Media 200</th><th>FR 6 m</th><th></th></tr>` +
+    r.rows.map(x => {
+      const acc = x.d_recent > x.d_prior && x.d_recent > 0;
+      return `<tr class="click" data-c="${x.cusip}">
+      <td class="tk">${esc(x.ticker || "—")}</td><td class="n">${esc(x.name)}</td>
+      <td>${spark((x.spark || []).slice(-5), 80, 24)}</td><td>${fmt(x.n_now)}</td>
+      <td class="${cls(x.d_filers)}">${sign(x.d_filers)}</td>
+      <td><span class="${acc ? "pos" : x.d_recent < x.d_prior ? "neg" : ""}">${sign(x.d_recent)} vs ${sign(x.d_prior)}</span></td>
+      <td>${fmtP(x.close)}</td>
+      <td>${badgeHTML(highBadge(x)) || pct(x.pct_from_high, 1)}</td>
+      <td>${x.above_sma200 == null ? "—" : x.above_sma200 ? '<span class="pos">encima</span>' : '<span class="neg">debajo</span>'}</td>
+      <td class="${cls(x.rs_6m)}">${sign(x.rs_6m)}</td>
+      <td><button type="button" class="star on" data-c="${x.cusip}" title="Quitar de favoritos">★</button></td></tr>`;
+    }).join("");
+  $("#ft").querySelectorAll("tr.click").forEach(tr => {
+    const x = r.rows.find(y => y.cusip === tr.dataset.c);
+    tr.querySelector(".star").onclick = e => { e.stopPropagation(); toggleFav({cusip: x.cusip}); loadFavs(); };
+    tr.onclick = () => openDetail(x.cusip, x.ticker || x.cusip);
+  });
+}
+$("#f-csv").onclick = () => downloadCSV("favoritos_13f.csv", lastFav, [
+  ["ticker", "Ticker"], ["name", "Empresa"], ["n_now", "Gestoras ahora"], ["d_filers", "Netas 1 año"], ["d_recent", "Netas 2 últimos T"],
+  ["d_prior", "Netas 2 T anteriores"], ["close", "Precio"], ["pct_from_high", "% desde máx. 52 s"],
+  [(r) => r.above_sma200 ? "sí" : "no", "Sobre media 200"], ["rs_6m", "FR 6 m vs SPY"], ["cusip", "CUSIP"]]);
+
+/* ---------- actualización de datos ---------- */
+const updBtn = $("#upd"), updMsg = $("#updmsg");
+function updSay(html) { updMsg.hidden = !html; updMsg.innerHTML = html; }
+updBtn.onclick = async () => {
+  updBtn.disabled = true; updSay("Consultando la SEC…");
+  try {
+    const r = await fetch("/api/update/check").then(r => r.json());
+    if (r.identity) { updBtn.disabled = false; return askIdentity($("#updmsg"), () => updBtn.onclick()); }
+    if (r.error) throw new Error(r.error);
+    if (!r.new.length) {
+      updSay(`La base ya está al día: no hay ficheros nuevos en la SEC (${r.local} descargados).
+<button type="button" class="ghost" id="force">Reconstruir igualmente</button><button type="button" class="ghost" id="close">Cerrar</button>`);
+      $("#force").onclick = startUpdate; $("#close").onclick = () => updSay("");
+    } else {
+      updSay(`Hay ${r.new.length} fichero(s) nuevo(s) en la SEC: ${r.new.map(esc).join(", ")}.
+Descargarlos y reconstruir la base tarda unos 30 minutos; mientras tanto puedes seguir usando la app.
+<button type="button" id="go">Actualizar ahora</button><button type="button" class="ghost" id="close">Cancelar</button>`);
+      $("#go").onclick = startUpdate; $("#close").onclick = () => updSay("");
+    }
+  } catch (e) { updSay("No se pudo consultar la SEC: " + esc(e.message)); }
+  updBtn.disabled = false;
+};
+async function startUpdate() {
+  updBtn.disabled = true;
+  const r = await fetch("/api/update/start", {method: "POST", headers: {"X-Fondos13F": "1"}});
+  if (r.status === 400) { updBtn.disabled = false; updMsg.hidden = false; return askIdentity($("#updmsg"), startUpdate); }
+  if (!r.ok && r.status !== 409) { updSay("No se pudo iniciar la actualización."); updBtn.disabled = false; return; }
+  pollUpdate();
+}
+let seenBuilt = null, seenFail = false, pollTimer = null;
+async function pollUpdate() {
+  clearTimeout(pollTimer);
+  let s;
+  try { s = await fetch("/api/update/status").then(r => r.json()); }
+  catch (e) { pollTimer = setTimeout(pollUpdate, 60000); return; }
+  if (!s.has_db) { enterSetup(s); pollTimer = setTimeout(pollUpdate, s.running ? 4000 : 60000); return; }
+  if (setupMode) { location.reload(); return; }
+  if (seenBuilt === null) seenBuilt = s.built_at;
+  if (s.running) {
+    updBtn.disabled = true;
+    updSay("Actualizando… " + esc(s.last.replace(/^\d\d:\d\d:\d\d /, "")));
+    pollTimer = setTimeout(pollUpdate, 4000);
+    return;
+  }
+  updBtn.disabled = false;
+  if (s.rc === 0 && s.built_at !== seenBuilt) {
+    seenBuilt = s.built_at;
+    updSay(`Base actualizada: datos hasta ${qlabel(s.last_period)}. <button type="button" class="ghost" id="close">Cerrar</button>`);
+    $("#close").onclick = () => updSay("");
+    $("#meta").textContent = `Datos SEC hasta el trimestre ${qlabel(s.last_period)} · base construida ${s.built_at}`;
+    $("#sgrid").innerHTML = ""; $("#rt").innerHTML = "";
+    const tab = store.get("tab13f", "sugerencias"); setTab(tab);
+  } else if (s.rc != null && s.rc !== 0 && !seenFail) {
+    seenFail = true;
+    updSay("La actualización falló:<br>" + esc(s.error || ""));
+  }
+  pollTimer = setTimeout(pollUpdate, 60000);
+  loadAuto();
+}
+pollUpdate();
+
+/* ---------- identificación ante la SEC ---------- */
+async function askIdentity(box, onDone, intro = true) {
+  const cur = await fetch("/api/identity").then(r => r.json()).catch(() => ({}));
+  box.hidden = false;
+  box.innerHTML = (intro ? `<div>La SEC pide que quien descarga sus datos se identifique con su <b>nombre y email</b>.
+    Se guardan solo en este ordenador y únicamente se envían a sec.gov, dentro de cada descarga.</div>` : "") +
+    `<div class="idform"><label>Nombre<input id="id-name" autocomplete="name" value="${esc(cur.name || "")}"></label>
+    <label>Email<input id="id-email" type="email" autocomplete="email" value="${esc(cur.email || "")}"></label>
+    <button type="button" id="id-save">Guardar</button></div><div class="err" id="id-err"></div>`;
+  box.querySelector("#id-save").onclick = async () => {
+    const r = await fetch("/api/identity", {method: "POST", headers: {"X-Fondos13F": "1", "Content-Type": "application/json"},
+      body: JSON.stringify({name: box.querySelector("#id-name").value, email: box.querySelector("#id-email").value})});
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) { box.querySelector("#id-err").textContent = j.error || "No se pudo guardar."; return; }
+    paintIdLine(j);
+    if (box === updMsg) updSay("");
+    if (onDone) onDone(j);
+  };
+}
+function paintIdLine(j) {
+  $("#idline").innerHTML = j && j.configured
+    ? `Identificación ante la SEC: ${esc(j.name || "variable SEC_USER_AGENT")}${j.email ? " · " + esc(j.email) : ""} · <button type="button" class="linkbtn" id="id-change">cambiar</button>`
+    : `Identificación ante la SEC: sin configurar · <button type="button" class="linkbtn" id="id-change">configurar</button>`;
+  $("#id-change").onclick = () => { askIdentity(updMsg, null); window.scrollTo({top: 0, behavior: "smooth"}); };
+}
+fetch("/api/identity").then(r => r.json()).then(paintIdLine).catch(() => {});
+
+/* ---------- primer arranque sin datos ---------- */
+let setupMode = false;
+async function enterSetup(s) {
+  const first = !setupMode;
+  setupMode = true;
+  $("#setup").hidden = false; $("#tabsbar").hidden = true;
+  ["sugerencias", "buscar", "ranking", "favoritos"].forEach(id => $("#" + id).hidden = true);
+  $("#meta").textContent = "Sin datos todavía.";
+  if (s.running) {
+    $("#setup-id").innerHTML = "";
+    $("#setup-go").innerHTML = `<div class="upd">Descargando y preparando los datos… ${esc((s.last || "").replace(/^\d\d:\d\d:\d\d /, ""))}
+      <br><span class="sub">Puedes dejar esta página abierta; se recargará sola al terminar.</span></div>`;
+    return;
+  }
+  const failed = s.rc != null && s.rc !== 0;
+  if (!first && !failed) return;
+  const errHtml = failed ? `<div class="upd err">La descarga falló:<br>${esc(s.error || "")}</div>` : "";
+  const id = await fetch("/api/identity").then(r => r.json()).catch(() => ({}));
+  const go = async () => {
+    const r = await fetch("/api/update/start", {method: "POST", headers: {"X-Fondos13F": "1"}});
+    if (r.status === 400) return askIdentity($("#setup-id"), go);
+    pollUpdate();
+  };
+  if (id.configured) {
+    $("#setup-id").innerHTML = `<div class="sub">Te identificarás ante la SEC como ${esc(id.name || "")} · ${esc(id.email || "")}.</div>`;
+  } else {
+    await askIdentity($("#setup-id"), () => { $("#setup-id").innerHTML = '<div class="sub">Identificación guardada.</div>'; });
+  }
+  $("#setup-go").innerHTML = errHtml + '<button type="button" id="setup-btn">Descargar datos</button>';
+  $("#setup-btn").onclick = go;
+}
+
+/* ---------- actualización automática ---------- */
+function paintAuto(a) {
+  const on = !!a.enabled;
+  $("#autosw").setAttribute("aria-checked", on ? "true" : "false");
+  $("#autosw").title = on
+    ? `Comprueba la SEC una vez al día y actualiza si hay datos nuevos.\nÚltima comprobación: ${a.last_check || "pendiente"}${a.last_result ? " (" + a.last_result + ")" : ""}\nPróxima: ${a.next_check || "en unos minutos"}`
+    : "Actualización automática apagada: usa «Buscar actualizaciones»";
+  $("#autolbl").textContent = on ? "Auto: sí" : "Auto: no";
+}
+async function loadAuto() {
+  try { paintAuto(await fetch("/api/auto").then(r => r.json())); } catch (e) {}
+}
+$("#autosw").onclick = async () => {
+  const on = $("#autosw").getAttribute("aria-checked") !== "true";
+  const r = await fetch("/api/auto", {method: "POST", headers: {"X-Fondos13F": "1", "Content-Type": "application/json"},
+    body: JSON.stringify({enabled: on})}).then(r => r.json()).catch(() => null);
+  if (r) {
+    paintAuto(r);
+    if (on) updSay(`Actualización automática activada: la app comprobará la SEC en los próximos minutos y después una vez al día, mientras el servidor esté encendido. <button type="button" class="ghost" id="close">Cerrar</button>`);
+    else updSay("");
+    const c = $("#close"); if (c) c.onclick = () => updSay("");
+  }
+};
+loadAuto();
+
+/* ---------- arranque ---------- */
+function fromHash() {
+  const h = decodeURIComponent(location.hash.slice(1));
+  if (h && h !== $("#q").value.trim().toUpperCase()) { setTab("buscar"); $("#q").value = h; search(h); return true; }
+  return false;
+}
+window.addEventListener("hashchange", fromHash);
+if (!fromHash()) {
+  const t = store.get("tab13f", "sugerencias");
+  setTab(["sugerencias", "buscar", "ranking", "favoritos"].includes(t) ? t : "sugerencias");
+}
+</script>
+</body>
+</html>
