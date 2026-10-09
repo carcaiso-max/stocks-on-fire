@@ -171,6 +171,12 @@ tr.click:hover td { background: var(--accent-soft); }
         <label>Liquidez mínima (volumen medio diario)
           <select id="s-liq"><option value="0">Sin mínimo</option><option value="5">5 M$</option><option value="20" selected>20 M$</option>
             <option value="50">50 M$</option><option value="100">100 M$</option><option value="500">500 M$</option></select></label>
+        <label>PER forward máximo
+          <select id="s-pe"><option value="0" selected>Sin límite</option><option>10</option><option>15</option><option>20</option>
+            <option>30</option><option>50</option></select></label>
+        <label>PEG máximo
+          <select id="s-peg"><option value="0" selected>Sin límite</option><option value="1">1</option><option value="1.5">1,5</option>
+            <option value="2">2</option></select></label>
         <label>Mostrar
           <select id="s-n"><option>10</option><option selected>20</option><option>30</option><option>50</option></select></label>
         <label class="chk"><input type="checkbox" id="s-high"> Solo a ≤5 % del máximo de 52 semanas</label>
@@ -191,6 +197,10 @@ tr.click:hover td { background: var(--accent-soft); }
         <span class="bd warn">Ruptura devuelta</span> marcó máximo pero ya ha caído más de un 5 % ·
         <span class="bd acc">Cerca de máximos</span> a ≤5 % sin ruptura reciente.</p>
         <p>Se puntúan técnicamente las 120 mejores por 13F; ETF y fondos excluidos. Convicción, compradores/vendedores y volumen se muestran como información, pero no puntúan.</p>
+        <p><b>Valoración</b> (Yahoo Finance, estimaciones de analistas): PER forward = precio ÷ beneficio por acción esperado el próximo año;
+        PEG = PER ÷ crecimiento anual esperado del beneficio a 5 años (por debajo de 1 se suele leer como barata para lo que crece; por encima de 2, cara).
+        Si los analistas esperan pérdidas no hay PER forward ni PEG con sentido. Es solo informativa y no puntúa: no existe histórico gratuito de
+        estimaciones para validarla con un backtest, y las estimaciones suelen ser optimistas. Compárala siempre dentro del mismo sector.</p>
         <p><b>Backtest 2014–2026</b> (sin look-ahead: solo informes presentados en plazo, entrada tras el día 46; 49 trimestres, ~1.700 acciones por trimestre):
         las 20 mejores por la parte 13F superaron a la media del universo en +4,4 puntos a 6 meses (t = 2,2; ganan el 64 % de los trimestres), pero
         casi toda la ventaja está en 2022–2026 (+7,3) y es débil en 2014–2021. El mejor componente es la <b>aceleración</b>. La parte técnica no añade ventaja
@@ -219,6 +229,12 @@ tr.click:hover td { background: var(--accent-soft); }
         <h2 id="techh">Precio y técnico</h2>
         <div class="kpis" id="tkpis" style="margin-top:0"></div>
         <div class="chart" style="margin-top:14px"><canvas id="c3"></canvas></div>
+      </div>
+      <div class="card" id="valcard">
+        <h2 id="valh">Valoración (estimaciones de analistas)</h2>
+        <div class="kpis" id="vkpis" style="margin-top:0"></div>
+        <div class="sub" style="margin-top:8px">Datos de Yahoo Finance. Solo informativos: las estimaciones suelen ser optimistas y no hay histórico gratuito para
+          validarlas. Compara siempre con empresas del mismo sector: un PER de 30 es caro para un banco y normal para un software.</div>
       </div>
       <div class="card" id="inscard">
         <h2 id="insh">Directivos (formulario 4)</h2>
@@ -367,6 +383,19 @@ const fmtLiq = v => v == null ? "—" : v >= 1e9 ? (v / 1e9).toLocaleString("es-
 const fmtMoney = v => !v ? "0 $" : v >= 1e9 ? (v / 1e9).toLocaleString("es-ES", {maximumFractionDigits: 2}) + " B$"
   : v >= 1e6 ? (v / 1e6).toLocaleString("es-ES", {maximumFractionDigits: 1}) + " M$"
   : Math.round(v / 1e3).toLocaleString("es-ES") + " k$";
+const fmt1 = v => v.toLocaleString("es-ES", {minimumFractionDigits: 1, maximumFractionDigits: 1});
+const fmt2 = v => v.toLocaleString("es-ES", {minimumFractionDigits: 2, maximumFractionDigits: 2});
+function peText(x) {
+  if (x.fwd_pe == null) return "PER fwd —";
+  return x.fwd_pe <= 0 ? "pérdidas esperadas" : "PER fwd " + fmt1(x.fwd_pe);
+}
+function valBadge(x) {
+  if (x.fwd_pe != null && x.fwd_pe <= 0) return ["Pérdidas esperadas", "warn"];
+  if (x.peg == null || x.peg <= 0) return null;
+  if (x.peg <= 1) return [`PEG ${fmt2(x.peg)}`, "pos"];
+  if (x.peg > 2) return [`PEG ${fmt2(x.peg)}`, "warn"];
+  return [`PEG ${fmt2(x.peg)}`, ""];
+}
 const badgeHTML = b => b ? `<span class="bd ${b[1]}">${esc(b[0])}</span>` : "";
 
 function downloadCSV(name, rows, cols) {
@@ -482,6 +511,24 @@ async function show(cusip, redraw) {
     ].map(([l, v, s]) => `<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${s}</div></div>`).join("");
   }
 
+  const v = tech && tech.val;
+  const hasVal = v && (v.fwd_pe != null || v.pe != null || v.peg != null);
+  $("#valcard").hidden = !hasVal;
+  if (hasVal) {
+    $("#valh").textContent = "Valoración (estimaciones de analistas)" + (v.industry ? ` · ${v.sector ? v.sector + " / " : ""}${v.industry}` : "");
+    const loss = v.fwd_pe != null && v.fwd_pe <= 0;
+    const pegTxt = v.peg == null ? "—" : `<span class="${v.peg <= 1 ? "pos" : v.peg > 2 ? "neg" : ""}">${fmt2(v.peg)}</span>`;
+    $("#vkpis").innerHTML = [
+      ["PER forward", loss ? '<span class="neg">pérdidas</span>' : v.fwd_pe == null ? "—" : fmt1(v.fwd_pe),
+        loss ? "los analistas esperan pérdidas el próximo año" : "precio ÷ beneficio esperado próximo año"],
+      ["PER actual", v.pe == null ? "—" : fmt1(v.pe), v.pe == null ? (v.eps_ttm < 0 ? "pérdidas en los últimos 12 meses" : "") : "últimos 12 meses"],
+      ["Beneficio por acción", v.eps_growth == null ? "—" : `<span class="${cls(v.eps_growth)}">${pct(v.eps_growth)}</span>`,
+        v.eps_fwd != null && v.eps_ttm != null ? `${fmtP(v.eps_ttm)} $ → ${fmtP(v.eps_fwd)} $ esperado` : ""],
+      ["PEG", pegTxt, "≤1 barata para lo que crece · >2 cara"],
+      ["Capitalización", v.market_cap ? fmtMoney(v.market_cap) : "—", ""],
+    ].map(([l, val, sub]) => `<div class="kpi"><div class="l">${l}</div><div class="v">${val}</div><div class="s">${sub}</div></div>`).join("");
+  }
+
   charts.forEach(c => c.destroy());
   const labels = q.map(x => qlabel(x.period));
   const grid = {color: css("--line")}, ticks = {color: css("--muted")};
@@ -542,11 +589,11 @@ async function show(cusip, redraw) {
 }
 
 /* ---------- sugerencias ---------- */
-["#s-profile", "#s-min", "#s-liq", "#s-n", "#s-high", "#s-up"].forEach(id => $(id).onchange = loadSug);
+["#s-profile", "#s-min", "#s-liq", "#s-pe", "#s-peg", "#s-n", "#s-high", "#s-up"].forEach(id => $(id).onchange = loadSug);
 let sugSeq = 0;
 async function loadSug() {
   const seq = ++sugSeq;
-  const qs = new URLSearchParams({profile: $("#s-profile").value, min: $("#s-min").value, n: $("#s-n").value, liq: $("#s-liq").value,
+  const qs = new URLSearchParams({profile: $("#s-profile").value, min: $("#s-min").value, n: $("#s-n").value, liq: $("#s-liq").value, pe: $("#s-pe").value, peg: $("#s-peg").value,
     high: $("#s-high").checked ? "1" : "0", up: $("#s-up").checked ? "1" : "0"});
   $("#s-info").textContent = "Calculando… (la primera vez descarga precios y tarda unos segundos)";
   const r = await fetch("/api/suggest?" + qs).then(r => r.json()).catch(e => ({error: e.message}));
@@ -562,6 +609,7 @@ async function loadSug() {
       acc ? ["Acelerando", "pos"] : x.d_recent < x.d_prior ? ["Frenando", "warn"] : null,
       x.consistency === 4 ? ["4/4 trimestres al alza", "acc"] : null,
       highBadge(x),
+      valBadge(x),
       volBadge(x),
       flowBadge(x),
       x.above_sma200 == null ? null : x.above_sma200 ? ["Sobre media 200", "pos"] : ["Bajo media 200", "neg"],
@@ -575,7 +623,7 @@ async function loadSug() {
       <div class="bars"><span>13F</span><div class="bar"><i style="width:${x.s13}%"></i></div><span>${Math.round(x.s13)}</span>
         <span>Técnico</span><div class="bar"><i style="width:${x.stech}%"></i></div><span>${Math.round(x.stech)}</span></div>
       <div class="sprow">${spark(x.spark.slice(-5))}<span>${fmt(x.n_before)} → <b style="color:var(--text)">${fmt(x.n_now)}</b> gestoras ·
-        ${fmtP(x.close)} $ · ${pct(x.pct_from_high, 1)} del máx. intradía · ${fmtLiq(x.dollar_vol)}/día</span></div>
+        ${fmtP(x.close)} $ · ${pct(x.pct_from_high, 1)} del máx. intradía · ${fmtLiq(x.dollar_vol)}/día · ${peText(x)}</span></div>
       <div class="badges">${badges.map(([t, c]) => `<span class="bd ${c}">${esc(t)}</span>`).join("")}</div>
       <ul>${x.reasons.map(t => `<li>${esc(t)}</li>`).join("")}</ul>
     </div>`;
@@ -592,7 +640,7 @@ $("#s-csv").onclick = () => downloadCSV("stocks_on_fire.csv", lastSug, [
   ["n_before", "Gestoras hace 1 año"], ["n_now", "Gestoras ahora"], ["d_filers", "Netas 1 año"], ["pct_filers", "% gestoras"],
   ["d_recent", "Netas 2 últimos T"], ["d_prior", "Netas 2 T anteriores"], ["consistency", "Trimestres al alza (de 4)"],
   ["pct_shares", "% acciones en manos de gestoras"], ["entries_conv", "Entradas con convicción"], ["buyers", "Compran"],
-  ["sellers", "Venden"], ["close", "Precio"], ["pct_from_high", "% desde máx. 52 s"], ["vol_ratio", "Volumen 10d / 50d"],
+  ["sellers", "Venden"], ["close", "Precio"], ["pct_from_high", "% desde máx. 52 s"], ["vol_ratio", "Volumen 10d / 50d"], ["fwd_pe", "PER forward"], ["pe", "PER actual"], ["eps_growth", "BPA esperado %"], ["peg", "PEG"],
   [(r) => r.dollar_vol / 1e6, "Volumen medio M$/día"],
   [(r) => r.breakout ? "sí" : "no", "Ruptura 10 sesiones"], [(r) => r.above_sma200 ? "sí" : "no", "Sobre media 200"],
   ["ret_6m", "Rent. 6 m %"], ["rs_6m", "FR 6 m vs SPY"], ["cusip", "CUSIP"]]);
@@ -620,7 +668,7 @@ async function loadRanking() {
   const hl = k => metric === k ? ' style="font-weight:650"' : "";
   $("#rt").innerHTML = `<tr><th>#</th><th>Ticker</th><th>Empresa</th><th>Gestoras antes</th><th>ahora</th>
     <th>Netas</th><th>%</th><th>Entran / salen</th><th title="Entradas con más del 1 % de la cartera de la gestora">Con convicción</th>
-    <th title="Entre las gestoras que ya la tenían">Compran / venden</th><th>Acciones %</th><th>Valor B$</th><th></th></tr>` +
+    <th title="Entre las gestoras que ya la tenían">Compran / venden</th><th>Acciones %</th><th>PER fwd</th><th>PEG</th><th>Valor B$</th><th></th></tr>` +
     r.rows.map((x, i) => `<tr class="click" data-c="${x.cusip}" data-t="${esc(x.ticker || x.cusip)}">
       <td>${i + 1}</td><td class="tk">${esc(x.ticker || "—")}</td>
       <td class="n">${esc(x.name)}${x.split !== 1 ? ` <span class="sub">(split ${x.split >= 1 ? x.split + "×1" : "1×" + Math.round(1 / x.split)})</span>` : ""}</td>
@@ -631,6 +679,8 @@ async function loadRanking() {
       <td>${fmt(x.entries_conv)}</td>
       <td><span class="${x.buyers > x.sellers ? "pos" : ""}">${fmt(x.buyers)}</span> / <span class="${x.sellers > x.buyers ? "neg" : ""}">${fmt(x.sellers)}</span></td>
       <td class="${cls(x.pct_shares)}"${hl("acciones")}>${pct(x.pct_shares, 1)}</td>
+      <td>${x.fwd_pe == null ? "—" : x.fwd_pe <= 0 ? '<span class="neg">pérd.</span>' : fmt1(x.fwd_pe)}</td>
+      <td>${x.peg == null ? "—" : `<span class="${x.peg <= 1 ? "pos" : x.peg > 2 ? "neg" : ""}">${fmt2(x.peg)}</span>`}</td>
       <td>${fmtB(x.value_now)}</td><td><button type="button" class="star" data-c="${x.cusip}">☆</button></td></tr>`).join("");
   $("#rt").querySelectorAll("tr.click").forEach(tr => {
     const x = r.rows.find(y => y.cusip === tr.dataset.c);
@@ -643,6 +693,7 @@ $("#r-csv").onclick = () => downloadCSV("ranking_13f.csv", lastRank, [
   ["ticker", "Ticker"], ["name", "Empresa"], ["n_before", "Gestoras antes"], ["n_now", "Gestoras ahora"], ["d_filers", "Netas"],
   ["pct_filers", "% gestoras"], ["entries", "Entran"], ["exits", "Salen"], ["entries_conv", "Entradas con convicción"],
   ["buyers", "Compran"], ["sellers", "Venden"], ["pct_shares", "% acciones"], ["split", "Split"],
+  ["fwd_pe", "PER forward"], ["peg", "PEG"],
   [(r) => r.value_now / 1e9, "Valor B$"], ["cusip", "CUSIP"]]);
 
 /* ---------- favoritos ---------- */
@@ -653,7 +704,7 @@ async function loadFavs() {
   const r = await fetch("/api/watch?cusips=" + f.map(x => x.cusip).join(",")).then(r => r.json());
   lastFav = r.rows;
   $("#ft").innerHTML = `<tr><th>Ticker</th><th>Empresa</th><th>Gestoras (5 T)</th><th>ahora</th><th>Netas 1 año</th>
-    <th>2 últimos T vs 2 anteriores</th><th>Precio</th><th>Desde máx. 52 s</th><th>Media 200</th><th>FR 6 m</th><th></th></tr>` +
+    <th>2 últimos T vs 2 anteriores</th><th>Precio</th><th>Desde máx. 52 s</th><th>Media 200</th><th>FR 6 m</th><th>PER fwd</th><th>PEG</th><th></th></tr>` +
     r.rows.map(x => {
       const acc = x.d_recent > x.d_prior && x.d_recent > 0;
       return `<tr class="click" data-c="${x.cusip}">
@@ -665,6 +716,8 @@ async function loadFavs() {
       <td>${badgeHTML(highBadge(x)) || pct(x.pct_from_high, 1)}</td>
       <td>${x.above_sma200 == null ? "—" : x.above_sma200 ? '<span class="pos">encima</span>' : '<span class="neg">debajo</span>'}</td>
       <td class="${cls(x.rs_6m)}">${sign(x.rs_6m)}</td>
+      <td>${x.fwd_pe == null ? "—" : x.fwd_pe <= 0 ? '<span class="neg">pérd.</span>' : fmt1(x.fwd_pe)}</td>
+      <td>${x.peg == null ? "—" : `<span class="${x.peg <= 1 ? "pos" : x.peg > 2 ? "neg" : ""}">${fmt2(x.peg)}</span>`}</td>
       <td><button type="button" class="star on" data-c="${x.cusip}" title="Quitar de favoritos">★</button></td></tr>`;
     }).join("");
   $("#ft").querySelectorAll("tr.click").forEach(tr => {
@@ -676,7 +729,8 @@ async function loadFavs() {
 $("#f-csv").onclick = () => downloadCSV("favoritos_13f.csv", lastFav, [
   ["ticker", "Ticker"], ["name", "Empresa"], ["n_now", "Gestoras ahora"], ["d_filers", "Netas 1 año"], ["d_recent", "Netas 2 últimos T"],
   ["d_prior", "Netas 2 T anteriores"], ["close", "Precio"], ["pct_from_high", "% desde máx. 52 s"],
-  [(r) => r.above_sma200 ? "sí" : "no", "Sobre media 200"], ["rs_6m", "FR 6 m vs SPY"], ["cusip", "CUSIP"]]);
+  [(r) => r.above_sma200 ? "sí" : "no", "Sobre media 200"], ["rs_6m", "FR 6 m vs SPY"], ["fwd_pe", "PER forward"],
+  ["peg", "PEG"], ["cusip", "CUSIP"]]);
 
 /* ---------- actualización de datos ---------- */
 const updBtn = $("#upd"), updMsg = $("#updmsg");

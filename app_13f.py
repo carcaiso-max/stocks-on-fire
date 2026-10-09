@@ -21,6 +21,7 @@ import numpy as np
 import pandas as pd
 
 import precios
+import valoracion
 import insiders
 from build_13f import (DATA_DIR, DB_PATH, EMAIL_RE, RAW_DIR, MissingIdentity, list_zip_urls, load_config,
                        sec_identity, update_config)
@@ -88,6 +89,17 @@ def reasons(r):
         out.append(f"{estado}: máximo {cuando}, ahora a {r['pct_from_high']:.1f} %".replace(".", ","))
     elif r.get("pct_from_high") is not None:
         out.append(f"a {abs(r['pct_from_high']):.0f} % del máximo de 52 semanas")
+    if r.get("fwd_pe") is not None and r["fwd_pe"] == r["fwd_pe"] and r["fwd_pe"] <= 0:
+        out.append("los analistas esperan pérdidas el próximo año (sin PER forward)")
+    elif r.get("fwd_pe") is not None and r["fwd_pe"] == r["fwd_pe"]:
+        txt = f"PER forward {r['fwd_pe']:.1f}"
+        if r.get("pe") is not None and r["pe"] == r["pe"]:
+            txt += f" (actual {r['pe']:.1f})"
+        if r.get("eps_growth") is not None and r["eps_growth"] == r["eps_growth"]:
+            txt += f": los analistas esperan un beneficio por acción {r['eps_growth']:+.0f} %"
+        out.append(txt.replace(".", ","))
+    if r.get("peg") is not None and r["peg"] == r["peg"] and r["peg"] > 0:
+        out.append(f"PEG {r['peg']:.2f}".replace(".", ","))
     if r.get("vol_ratio") is not None and r["vol_ratio"] >= 1.5:
         out.append(f"volumen de las últimas 10 sesiones ×{r['vol_ratio']:.1f} su media de 50".replace(".", ","))
     if r.get("above_sma200") is not None:
@@ -165,7 +177,7 @@ class Store:
             out[c] = inf.get("ticker") or self.name_to_ticker.get(norm_name(self.sec["name"].get(c, "")))
         return out
 
-    def suggestions(self, min_base, n, profile, only_high, only_up, min_liq=0.0):
+    def suggestions(self, min_base, n, profile, only_high, only_up, min_liq=0.0, max_pe=0.0, max_peg=0.0):
         t = self.stock_universe(min_base)
         if t.empty:
             return {"rows": [], "error": "Falta la tabla de tendencias: ejecuta python build_13f.py --trends-only"}
@@ -184,6 +196,9 @@ class Store:
         if t.empty:
             return {"rows": [], "error": "No se pudieron descargar precios (¿sin conexión?)."}
         t = t.join(pd.DataFrame([tech[x] for x in t["ticker"]], index=t.index))
+        val = valoracion.fetch(t["ticker"].tolist(), with_profile=bool(max_peg))
+        t = t.join(pd.DataFrame([val.get(x, {}) for x in t["ticker"]], index=t.index)
+                   .reindex(columns=["fwd_pe", "pe", "eps_growth", "peg"]))
         prox = (1 + t["pct_from_high"] / 30).clip(0, 1)
         trend = (t["above_sma200"].fillna(False).astype(float) + t["trend_up"].fillna(False).astype(float)) / 2
         live_breakout = (t["breakout"] & (t["pct_from_high"] >= -5)) | t["close_high"]
@@ -196,11 +211,19 @@ class Store:
             t = t[t["above_sma200"].fillna(False).astype(bool)]
         if min_liq:
             t = t[t["dollar_vol"].fillna(0) >= min_liq * 1e6]
-        t = t.sort_values("score", ascending=False).head(n)
+        if max_pe:
+            t = t[t["fwd_pe"].notna() & (t["fwd_pe"] > 0) & (t["fwd_pe"] <= max_pe)]
+        if max_peg:
+            t = t[t["peg"].notna() & (t["peg"] > 0) & (t["peg"] <= max_peg)]
+        t = t.sort_values("score", ascending=False).head(n).copy()
+        if not max_peg and len(t):
+            pv = valoracion.fetch(t["ticker"].tolist())
+            t["peg"] = [pv.get(x, {}).get("peg") for x in t["ticker"]]
         keys = ("cusip", "ticker", "name", "score", "s13", "stech", "n_before", "n_now", "d_filers", "pct_filers",
                 "d_recent", "d_prior", "accel", "consistency", "pct_shares", "split", "spark", "close", "pct_from_high",
                 "days_since_high", "breakout", "close_high", "at_high", "above_sma200", "trend_up", "ret_6m", "rs_6m",
-                "entries", "entries_conv", "buyers", "sellers", "vol_ratio", "dollar_vol", "reasons")
+                "entries", "entries_conv", "buyers", "sellers", "vol_ratio", "dollar_vol", "fwd_pe", "pe", "eps_growth", "peg",
+                "reasons")
         rows = []
         for r in t.to_dict("records"):
             r["reasons"] = reasons(r)
@@ -215,7 +238,7 @@ class Store:
         if df is None:
             return {"ticker": tk, "tech": None, "series": []}
         return {"ticker": tk, "tech": precios.technicals(df, precios.history(precios.BENCH)),
-                "series": precios.weekly_series(df)}
+                "series": precios.weekly_series(df), "val": valoracion.fetch([tk]).get(tk, {})}
 
     def insiders(self, cusip):
         """Compras y ventas de directivos en mercado abierto (formulario 4) de los últimos 24 meses."""
@@ -273,14 +296,17 @@ class Store:
         t["ticker"] = t["cusip"].map(self.tickers_for(cusips, stocks_only=False))
         hist = precios.many([x for x in t["ticker"] if x] + [precios.BENCH])
         bench = hist.get(precios.BENCH)
+        val = valoracion.fetch([x for x in t["ticker"] if x])
         keys = ("cusip", "ticker", "name", "n_now", "d_filers", "pct_filers", "d_recent", "d_prior", "accel",
                 "consistency", "pct_shares", "spark", "close", "pct_from_high", "days_since_high", "breakout", "close_high",
-                "above_sma200", "ret_6m", "rs_6m", "entries_conv", "buyers", "sellers", "vol_ratio", "dollar_vol")
+                "above_sma200", "ret_6m", "rs_6m", "entries_conv", "buyers", "sellers", "vol_ratio", "dollar_vol",
+                "fwd_pe", "pe", "eps_growth", "peg")
         rows = []
         for r in t.to_dict("records"):
             df = hist.get(r["ticker"]) if r["ticker"] else None
             if df is not None:
                 r.update(precios.technicals(df, bench))
+            r.update(val.get(r["ticker"], {}) if r["ticker"] else {})
             rows.append({k: r.get(k) for k in keys})
         order = {c: i for i, c in enumerate(cusips)}
         rows.sort(key=lambda r: order.get(r["cusip"], 0))
@@ -397,6 +423,10 @@ class Store:
                     break
             if len(rows) >= n:
                 break
+        val = valoracion.fetch([r["ticker"] for r in rows if r["ticker"]])
+        for r in rows:
+            v = val.get(r["ticker"], {}) if r["ticker"] else {}
+            r["fwd_pe"], r["peg"] = v.get("fwd_pe"), v.get("peg")
         first = t.iloc[0] if len(t) else None
         return {"rows": json.loads(pd.DataFrame(rows).to_json(orient="records")) if rows else [],
                 "period": first["period"] if first is not None else None,
@@ -658,7 +688,8 @@ class Handler(BaseHTTPRequestHandler):
                 g = lambda k, d: qs.get(k, [d])[0]
                 self.send(200, STORE.suggestions(int(g("min", "100")), min(int(g("n", "20")), 50),
                                                  g("profile", "equilibrado"), g("high", "0") == "1", g("up", "0") == "1",
-                                                 float(g("liq", "0"))))
+                                                 float(g("liq", "0")), float(g("pe", "0")),
+                                                 float(g("peg", "0"))))
             elif url.path == "/api/tech":
                 cusip = qs.get("cusip", [""])[0].upper()
                 self.send(200, STORE.tech(cusip) if cusip in STORE.sec.index else {"error": "CUSIP no encontrado"})

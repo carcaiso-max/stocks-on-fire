@@ -6,6 +6,7 @@ Herramienta gratuita y de código abierto para **investigar acciones de EE. UU. 
 - **Compras y ventas de directivos** (formulario 4) desde 2006: quién, cuánto y cuánto cambia su participación.
 - **Ranking** de las acciones donde más gestoras están entrando, con detección automática de splits.
 - **Pestaña «Stocks on fire»**: una puntuación que combina la entrada de gestoras (y su aceleración) con el momento técnico del precio.
+- **Valoración**: PER forward, PER actual, beneficio por acción esperado y PEG, con filtros (solo informativa, no puntúa).
 - Ficha completa de cada acción con gráficos, favoritos, exportación a CSV, modo oscuro y actualización automática.
 
 Funciona **en tu ordenador**: no hay servidores, cuentas ni suscripciones. Tú descargas los datos directamente de la SEC.
@@ -69,6 +70,7 @@ En la carpeta `fondos13f` dentro de tu carpeta de usuario (por ejemplo `C:\Users
 - **Splits.** Las acciones declaradas no vienen ajustadas por splits. El ranking los detecta solo (si muchas gestoras que no han operado tienen exactamente ×10 acciones, es un split 10×1).
 - **Directivos.** Solo compras y ventas en mercado abierto. Las ventas «plan» (regla 10b5-1) están programadas con antelación y dicen poco.
 - **Precios** de Yahoo Finance, solo para el análisis técnico (máximos de 52 semanas, medias, fuerza relativa).
+- **Valoración** (PER forward, PEG) de Yahoo Finance, con estimaciones de analistas: suelen ser optimistas, y si se esperan pérdidas no hay PER forward ni PEG con sentido. Compárala dentro del mismo sector. No hay histórico gratuito de estimaciones, así que no está validada con backtest.
 
 ## ¿Funciona?
 
@@ -101,6 +103,7 @@ python backtest_insiders.py         # compras de directivos
 | `build_13f.py` | Descarga los datos 13F de la SEC y construye la base de datos |
 | `insiders.py` | Descarga las compras y ventas de directivos (formulario 4) |
 | `precios.py` | Precios diarios e indicadores técnicos |
+| `valoracion.py` | PER forward, PER actual, PEG y sector (Yahoo) |
 | `backtest_*.py`, `estrategia_aceleracion.py`, `historial_flujos.py` | Backtests |
 | `iniciar.bat` / `iniciar.sh` | Arranque con doble clic |
 | `actualizar_datos.bat` | Actualizar desde la consola (Windows) |
@@ -108,7 +111,7 @@ python backtest_insiders.py         # compras de directivos
 ## Fuentes de datos y licencias
 
 - **SEC** (13F, formulario 4, lista de tickers): datos públicos del Gobierno de EE. UU.
-- **Yahoo Finance** (precios): API no oficial, **solo para uso personal**. Este proyecto no está afiliado a Yahoo; cada usuario descarga los precios para su propio uso. No redistribuyas esos datos.
+- **Yahoo Finance** (precios y valoración): API no oficial, **solo para uso personal**. Este proyecto no está afiliado a Yahoo; cada usuario descarga los precios para su propio uso. No redistribuyas esos datos.
 - **OpenFIGI** (equivalencia entre CUSIP y ticker): identificadores abiertos de Bloomberg.
 - **Chart.js** (gráficos), licencia MIT.
 
