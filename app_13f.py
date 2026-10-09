@@ -216,7 +216,7 @@ class Store:
         return out
 
     def suggestions(self, min_base, n, profile, only_high, only_up, min_liq=0.0, max_pe=0.0, max_peg=0.0,
-                    min_rev_growth=None):
+                    min_rev_growth=None, min_price=MIN_PRICE):
         t = self.stock_universe(min_base)
         if t.empty:
             return {"rows": [], "error": "Falta la tabla de tendencias: ejecuta python build_13f.py --trends-only"}
@@ -260,7 +260,8 @@ class Store:
             t = t[t["above_sma200"].fillna(False).astype(bool)]
         if min_liq:
             t = t[t["dollar_vol"].fillna(0) >= min_liq * 1e6]
-        t = t[t["close"].fillna(0) >= MIN_PRICE]
+        if min_price:
+            t = t[t["close"].fillna(0) >= min_price]
         if max_pe:
             t = t[t["fwd_pe"].notna() & (t["fwd_pe"] > 0) & (t["fwd_pe"] <= max_pe)]
         if max_peg:
@@ -790,7 +791,8 @@ class Handler(BaseHTTPRequestHandler):
                                                  g("profile", "aceleracion"), g("high", "0") == "1", g("up", "0") == "1",
                                                  float(g("liq", "5")), float(g("pe", "0")),
                                                  float(g("peg", "0")),
-                                                 None if g("rev", "10") in ("", "none") else float(g("rev", "10"))))
+                                                 None if g("rev", "10") in ("", "none") else float(g("rev", "10")),
+                                                 float(g("price", str(MIN_PRICE)))))
             elif url.path == "/api/tech":
                 cusip = qs.get("cusip", [""])[0].upper()
                 self.send(200, STORE.tech(cusip) if cusip in STORE.sec.index else {"error": "CUSIP no encontrado"})

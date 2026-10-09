@@ -172,6 +172,9 @@ tr.click:hover td { background: var(--accent-soft); }
         <label>Liquidez mínima (volumen medio diario)
           <select id="s-liq"><option value="0">Sin mínimo</option><option value="5" selected>5 M$</option><option value="20">20 M$</option>
             <option value="50">50 M$</option><option value="100">100 M$</option><option value="500">500 M$</option></select></label>
+        <label>Precio mínimo
+          <select id="s-price"><option value="0">Sin mínimo</option><option value="1">1 $</option>
+            <option value="5" selected>5 $</option><option value="10">10 $</option><option value="20">20 $</option></select></label>
         <label>Ventas (SEC) crecen más de
           <select id="s-rev"><option value="none">Sin filtro</option><option value="0">0 %</option>
             <option value="10" selected>10 %</option><option value="20">20 %</option></select></label>
@@ -637,11 +640,11 @@ async function show(cusip, redraw) {
 }
 
 /* ---------- sugerencias ---------- */
-["#s-profile", "#s-min", "#s-liq", "#s-rev", "#s-pe", "#s-peg", "#s-n", "#s-high", "#s-up"].forEach(id => $(id).onchange = loadSug);
+["#s-profile", "#s-min", "#s-liq", "#s-price", "#s-rev", "#s-pe", "#s-peg", "#s-n", "#s-high", "#s-up"].forEach(id => $(id).onchange = loadSug);
 let sugSeq = 0;
 async function loadSug() {
   const seq = ++sugSeq;
-  const qs = new URLSearchParams({profile: $("#s-profile").value, min: $("#s-min").value, n: $("#s-n").value, liq: $("#s-liq").value, pe: $("#s-pe").value, peg: $("#s-peg").value, rev: $("#s-rev").value,
+  const qs = new URLSearchParams({profile: $("#s-profile").value, min: $("#s-min").value, n: $("#s-n").value, liq: $("#s-liq").value, pe: $("#s-pe").value, peg: $("#s-peg").value, rev: $("#s-rev").value, price: $("#s-price").value,
     high: $("#s-high").checked ? "1" : "0", up: $("#s-up").checked ? "1" : "0"});
   $("#s-info").textContent = "Calculando… (la primera vez descarga precios y tarda unos segundos)";
   const r = await fetch("/api/suggest?" + qs).then(r => r.json()).catch(e => ({error: e.message}));
