@@ -129,6 +129,10 @@ Este repositorio **no contiene datos**: solo el código para descargarlos.
 - Los ficheros de la SEC tienen algún trimestre incompleto; afecta por igual a todas las acciones de ese trimestre.
 - Las acciones de tickers poco habituales (clases B, extranjeras) a veces no se encuentran por ticker; prueba por nombre o CUSIP.
 
+## Del mismo autor
+
+**BrokkoPay**, para seguir el patrimonio de todos tus brókeres y ver el «sueldo» mensual que generan tus inversiones. [Google Play](https://play.google.com/store/apps/details?id=com.brokkopay.app) · *Promoción del autor*
+
 ## Licencia
 
 [MIT](LICENSE): puedes usarla, modificarla y compartirla libremente. Se distribuye sin garantía de ningún tipo.
