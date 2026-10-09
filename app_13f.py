@@ -427,7 +427,45 @@ class Store:
                                                       "days_since", "n_added", "series")})
         order = {c: i for i, c in enumerate(cusips)}
         rows.sort(key=lambda r: order.get(r["cusip"], 0))
-        return {"rows": json.loads(pd.DataFrame(rows).to_json(orient="records"))}
+        equity = self.favs_equity(t, hist, bench, added or {})
+        return {"rows": json.loads(pd.DataFrame(rows).to_json(orient="records")), "equity": equity}
+
+    @staticmethod
+    def favs_equity(t, hist, bench, added, stake=1000.0):
+        """Cartera simulada: `stake` $ en cada favorito el día de su alta, frente al mismo dinero en SPY en las mismas fechas."""
+        if bench is None:
+            return []
+        b = bench.set_index("date")["close"]
+        legs = []
+        for cusip, tk in zip(t["cusip"], t["ticker"]):
+            df = hist.get(tk) if tk else None
+            if df is None or not added.get(cusip):
+                continue
+            d0 = pd.Timestamp(added[cusip])
+            c = df.set_index("date")["close"]
+            p0, b0 = c.asof(d0), b.asof(d0)
+            if p0 != p0 or b0 != b0:
+                continue
+            legs.append((d0, c, p0, b0))
+        if not legs:
+            return []
+        start = min(l[0] for l in legs)
+        days = b.index[b.index >= start]
+        days = days.union(pd.DatetimeIndex([l[0] for l in legs]))
+        eq = pd.Series(0.0, index=days)
+        spy = pd.Series(0.0, index=days)
+        inv = pd.Series(0.0, index=days)
+        for d0, c, p0, b0 in legs:
+            on = days >= d0
+            eq[on] += (c.reindex(days, method="ffill")[on] / p0 * stake).fillna(stake).to_numpy()
+            spy[on] += (b.reindex(days, method="ffill")[on] / b0 * stake).fillna(stake).to_numpy()
+            inv[on] += stake
+        step = max(1, len(days) // 400)
+        idx = list(range(0, len(days), step))
+        if idx[-1] != len(days) - 1:
+            idx.append(len(days) - 1)
+        return [[days[i].strftime("%Y-%m-%d"), round(float(eq.iloc[i]), 2), round(float(spy.iloc[i]), 2), round(float(inv.iloc[i]), 2)]
+                for i in idx]
 
     def since_added(self, r, df, bench, added):
         """Evolución desde la fecha en que se añadió a favoritos: precio, frente a SPY, caídas y gestoras."""
