@@ -34,6 +34,36 @@ HERE = Path(__file__).parent
 TICKERS_URL = "https://www.sec.gov/files/company_tickers.json"
 TICKERS_FILE = DATA_DIR / "company_tickers.json"
 FIGI_CACHE_FILE = DATA_DIR / "figi_cache.json"
+FAVS_FILE = Path(os.environ.get("FONDOS13F_FAVS", DATA_DIR / "favoritos.json"))
+DATE_RE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
+
+
+def load_favs():
+    try:
+        favs = json.loads(FAVS_FILE.read_text(encoding="utf-8"))
+        return favs if isinstance(favs, list) else []
+    except (OSError, ValueError):
+        return []
+
+
+def save_favs(items):
+    """Valida y guarda la lista de favoritos: cusip, ticker, nombre y fecha de alta."""
+    clean, seen = [], set()
+    for it in items if isinstance(items, list) else []:
+        if not isinstance(it, dict):
+            continue
+        cusip = str(it.get("cusip", "")).upper()
+        if not re.fullmatch(r"[0-9A-Z]{9}", cusip) or cusip in seen:
+            continue
+        added = str(it.get("added", ""))
+        if not DATE_RE.match(added):
+            added = time.strftime("%Y-%m-%d")
+        seen.add(cusip)
+        clean.append({"cusip": cusip, "ticker": (str(it["ticker"])[:12] if it.get("ticker") else None),
+                      "name": str(it.get("name") or "")[:120], "added": added})
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+    FAVS_FILE.write_text(json.dumps(clean, ensure_ascii=False, indent=1), encoding="utf-8")
+    return clean
 OPENFIGI_URL = "https://api.openfigi.com/v3/mapping"
 
 MIN_PRICE = 5
@@ -366,7 +396,7 @@ class Store:
                 "monthly": [{"m": k, "buy": float(v["P"]), "sell": float(v["S"])} for k, v in monthly.iterrows()],
                 "rows": json.loads(rows.drop(columns=["issuer"]).to_json(orient="records"))}
 
-    def watch(self, cusips):
+    def watch(self, cusips, added=None):
         cusips = [c for c in dict.fromkeys(cusips) if c in self.sec.index][:60]
         if not cusips:
             return {"rows": []}
@@ -391,10 +421,59 @@ class Store:
                 r.update(precios.technicals(df, bench))
             r.update(val.get(r["ticker"], {}) if r["ticker"] else {})
             r.update(sec.get(r["ticker"], {}) if r["ticker"] else {})
-            rows.append({k: r.get(k) for k in keys + ("revenue_growth",)})
+            r.update(self.since_added(r, df, bench, (added or {}).get(r["cusip"])))
+            rows.append({k: r.get(k) for k in keys + ("revenue_growth", "added", "price_added", "ret_since",
+                                                      "spy_since", "xs_since", "max_dd_since", "max_up_since",
+                                                      "days_since", "n_added", "series")})
         order = {c: i for i, c in enumerate(cusips)}
         rows.sort(key=lambda r: order.get(r["cusip"], 0))
         return {"rows": json.loads(pd.DataFrame(rows).to_json(orient="records"))}
+
+    def since_added(self, r, df, bench, added):
+        """Evolución desde la fecha en que se añadió a favoritos: precio, frente a SPY, caídas y gestoras."""
+        if not added or df is None:
+            return {"added": added}
+        d0 = pd.Timestamp(added)
+        c = df.set_index("date")["close"]
+        p0 = c.asof(d0)
+        if p0 != p0:
+            c0 = c[c.index >= d0]
+            if c0.empty:
+                return {"added": added}
+            p0 = c0.iloc[0]
+        path = c[c.index >= d0]
+        path = pd.concat([pd.Series([p0], index=[d0]), path[path.index > d0]])
+        out = {"added": added, "price_added": float(p0), "ret_since": float((c.iloc[-1] / p0 - 1) * 100),
+               "days_since": int((pd.Timestamp.today().normalize() - d0).days),
+               "max_dd_since": float(((path / path.cummax()) - 1).min() * 100),
+               "max_up_since": float((path.max() / p0 - 1) * 100)}
+        if bench is not None:
+            b = bench.set_index("date")["close"]
+            b0 = b.asof(d0)
+            if b0 == b0:
+                out["spy_since"] = float((b.iloc[-1] / b0 - 1) * 100)
+                out["xs_since"] = out["ret_since"] - out["spy_since"]
+        step = max(1, len(path) // 300)
+        out["series"] = [[d.strftime("%Y-%m-%d"), round(float(v / p0 * 100), 2)] for d, v in path.iloc[::step].items()]
+        if out["series"] and out["series"][-1][0] != path.index[-1].strftime("%Y-%m-%d"):
+            out["series"].append([path.index[-1].strftime("%Y-%m-%d"), round(float(path.iloc[-1] / p0 * 100), 2)])
+        known = [q for q in self.qseries.columns if pd.Timestamp(q) + pd.Timedelta(days=46) <= d0]
+        if known and r["cusip"] in self.qseries.index:
+            out["n_added"] = int(self.qseries.loc[r["cusip"], known[-1]])
+        return out
+
+    def spy_since(self, start):
+        b = precios.history(precios.BENCH)
+        if b is None or not start:
+            return []
+        b = b.set_index("date")["close"]
+        d0 = pd.Timestamp(start)
+        b0 = b.asof(d0)
+        path = b[b.index >= d0]
+        if b0 != b0 or path.empty:
+            return []
+        step = max(1, len(path) // 300)
+        return [[d.strftime("%Y-%m-%d"), round(float(v / b0 * 100), 2)] for d, v in path.iloc[::step].items()]
 
     def load_trends(self):
         con = self.con()
@@ -761,6 +840,8 @@ class Handler(BaseHTTPRequestHandler):
                 cfg = load_config()
                 self.send(200, {"configured": bool(cfg.get("sec_name") and cfg.get("sec_email")) or bool(os.environ.get("SEC_USER_AGENT")),
                                 "name": cfg.get("sec_name"), "email": cfg.get("sec_email")})
+            elif url.path == "/api/favs":
+                self.send(200, {"favs": load_favs()})
             elif url.path == "/api/update/check":
                 self.send(200, UPDATER.check())
             elif url.path == "/api/update/status":
@@ -803,7 +884,12 @@ class Handler(BaseHTTPRequestHandler):
                 cusip = qs.get("cusip", [""])[0].upper()
                 self.send(200, STORE.insiders(cusip) if cusip in STORE.sec.index else {"error": "CUSIP no encontrado"})
             elif url.path == "/api/watch":
-                self.send(200, STORE.watch([c for c in qs.get("cusips", [""])[0].upper().split(",") if c]))
+                cusips = [c for c in qs.get("cusips", [""])[0].upper().split(",") if c]
+                dates = qs.get("added", [""])[0].split(",")
+                added = {c: d for c, d in zip(cusips, dates) if DATE_RE.match(d)}
+                res = STORE.watch(cusips, added)
+                res["spy"] = STORE.spy_since(min(added.values())) if added else []
+                self.send(200, res)
             else:
                 self.send(404, {"error": "no encontrado"})
         except MissingIdentity as e:
@@ -821,6 +907,12 @@ class Handler(BaseHTTPRequestHandler):
             except MissingIdentity as e:
                 return self.send(400, {"error": str(e), "identity": True})
             self.send(200 if started else 409, {"started": started})
+        elif path == "/api/favs":
+            try:
+                body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")
+            except ValueError:
+                return self.send(400, {"error": "JSON no válido"})
+            self.send(200, {"favs": save_favs(body.get("favs"))})
         elif path == "/api/identity":
             try:
                 body = json.loads(self.rfile.read(int(self.headers.get("Content-Length") or 0)) or b"{}")

@@ -121,6 +121,7 @@ tr.click:hover td { background: var(--accent-soft); }
 .promo a { color: var(--accent); }
 .notes li { margin: 3px 0; }
 .empty { color: var(--muted); padding: 18px 4px; }
+.fdate { padding: 4px 6px; font-size: 12.5px; border-radius: 6px; border: 1px solid var(--line); background: var(--panel); color: var(--text); }
 .idform { display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end; margin-top: 8px; }
 .idform label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
 .idform input { padding: 8px 10px; font-size: 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel);
@@ -314,8 +315,11 @@ tr.click:hover td { background: var(--accent-soft); }
         <h2 style="margin:0">Tus favoritos</h2><span class="grow"></span>
         <button type="button" class="ghost small" id="f-csv">Exportar CSV</button>
       </div>
-      <div class="sub">Se guardan en este navegador. Añádelos con la estrella ☆ en Stocks on fire, en el ranking o en la ficha de una acción.</div>
-      <div class="tw" style="margin-top:10px"><table id="ft"></table></div>
+      <div class="sub">Añádelos con la estrella ☆ en Stocks on fire, en el ranking o en la ficha de una acción. Se guardan en tu carpeta de datos
+        con la fecha de alta, y desde ese día se sigue su evolución (puedes cambiar la fecha en la tabla).</div>
+      <div class="kpis" id="fsum"></div>
+      <div class="chart" id="fchartbox" style="margin-top:14px" hidden><canvas id="c6"></canvas></div>
+      <div class="tw" style="margin-top:12px"><table id="ft"></table></div>
     </div>
   </section>
 
@@ -363,14 +367,33 @@ $("#theme").textContent = "Tema: " + TNAME[document.documentElement.dataset.them
 matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { if (current) show(current.cusip, true); });
 
 /* ---------- favoritos ---------- */
-const favs = () => store.get("fav13f", []);
-const isFav = c => favs().some(f => f.cusip === c);
-function toggleFav(item) {
-  let f = favs();
-  f = f.some(x => x.cusip === item.cusip) ? f.filter(x => x.cusip !== item.cusip) : [...f, item];
-  store.set("fav13f", f); updFavCount();
+let favList = [];
+const favs = () => favList;
+const isFav = c => favList.some(f => f.cusip === c);
+const todayStr = () => { const d = new Date(); return new Date(d - d.getTimezoneOffset() * 60000).toISOString().slice(0, 10); };
+async function saveFavs() {
+  const r = await fetch("/api/favs", {method: "POST", headers: {"X-Fondos13F": "1", "Content-Type": "application/json"},
+    body: JSON.stringify({favs: favList})}).then(r => r.json()).catch(() => null);
+  if (r && r.favs) favList = r.favs;
+}
+async function loadFavList() {
+  const r = await fetch("/api/favs").then(r => r.json()).catch(() => null);
+  favList = (r && r.favs) || [];
+  const local = store.get("fav13f", []);
+  const toAdd = local.filter(x => x && x.cusip && !isFav(x.cusip));
+  if (toAdd.length) {
+    favList = [...favList, ...toAdd.map(x => ({...x, added: x.added || todayStr()}))];
+    await saveFavs();
+  }
+  if (local.length) { try { localStorage.removeItem("fav13f"); } catch (e) {} }
+  updFavCount();
+}
+async function toggleFav(item) {
+  favList = isFav(item.cusip) ? favList.filter(x => x.cusip !== item.cusip) : [...favList, {...item, added: todayStr()}];
+  updFavCount();
   document.querySelectorAll(`.star[data-c="${item.cusip}"]`).forEach(b => paintStar(b, item.cusip));
   if (current && current.cusip === item.cusip) paintStar($("#dstar"), item.cusip);
+  await saveFavs();
 }
 function paintStar(b, c) { const on = isFav(c); b.classList.toggle("on", on); b.textContent = on ? "★" : "☆"; b.title = on ? "Quitar de favoritos" : "Añadir a favoritos"; }
 function updFavCount() { const n = favs().length; $("#favn").textContent = n ? `(${n})` : ""; }
@@ -761,25 +784,72 @@ $("#r-csv").onclick = () => downloadCSV("ranking_13f.csv", lastRank, [
   [(r) => r.value_now / 1e9, "Valor B$"], ["cusip", "CUSIP"]]);
 
 /* ---------- favoritos ---------- */
+let favChart = null;
+const FAV_COLORS = ["#2f6fdf", "#e0731a", "#1a8f4c", "#c8372d", "#8e44ad", "#16a3a8", "#b8860b", "#d6336c", "#5c7cfa", "#2b8a3e"];
 async function loadFavs() {
   const f = favs();
+  if (favChart) { favChart.destroy(); favChart = null; }
+  $("#fsum").innerHTML = ""; $("#fchartbox").hidden = true;
   if (!f.length) { lastFav = []; $("#ft").innerHTML = '<tr><td class="empty">Aún no tienes favoritos.</td></tr>'; return; }
   $("#ft").innerHTML = '<tr><td class="empty">Cargando…</td></tr>';
-  const r = await fetch("/api/watch?cusips=" + f.map(x => x.cusip).join(",")).then(r => r.json());
+  const r = await fetch("/api/watch?cusips=" + f.map(x => x.cusip).join(",") + "&added=" + f.map(x => x.added || "").join(","))
+    .then(r => r.json());
   lastFav = r.rows;
-  $("#ft").innerHTML = `<tr><th>Ticker</th><th>Empresa</th><th>Gestoras (5 T)</th><th>ahora</th><th>Netas 1 año</th>
-    <th>2 últimos T vs 2 anteriores</th><th>Precio</th><th>Desde máx. 52 s</th><th>Media 200</th><th>FR 6 m</th><th>Ventas 1 año</th><th>PER fwd</th><th>PEG</th><th></th></tr>` +
+  const tracked = r.rows.filter(x => x.ret_since != null);
+  if (tracked.length) {
+    const avg = a => a.reduce((s, v) => s + v, 0) / a.length;
+    const mRet = avg(tracked.map(x => x.ret_since));
+    const withSpy = tracked.filter(x => x.spy_since != null);
+    const mSpy = withSpy.length ? avg(withSpy.map(x => x.spy_since)) : null;
+    const best = tracked.reduce((a, b) => b.ret_since > a.ret_since ? b : a), worst = tracked.reduce((a, b) => b.ret_since < a.ret_since ? b : a);
+    const beat = withSpy.filter(x => x.xs_since > 0).length;
+    $("#fsum").innerHTML = [
+      ["Rentabilidad media desde el alta", `<span class="${cls(mRet)}">${pct(mRet, 1)}</span>`, `${tracked.length} favoritos, a partes iguales`],
+      ["SPY en los mismos días", mSpy == null ? "—" : `<span class="${cls(mSpy)}">${pct(mSpy, 1)}</span>`,
+        mSpy == null ? "" : `diferencia <b class="${cls(mRet - mSpy)}">${sign(mRet - mSpy, 1)} pt</b>`],
+      ["Baten a SPY", `${beat} de ${withSpy.length}`, ""],
+      ["Mejor", `<span class="${cls(best.ret_since)}">${pct(best.ret_since, 1)}</span>`, esc(best.ticker || best.name)],
+      ["Peor", `<span class="${cls(worst.ret_since)}">${pct(worst.ret_since, 1)}</span>`, esc(worst.ticker || worst.name)],
+    ].map(([l, v, sub]) => `<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${sub}</div></div>`).join("");
+    const withSeries = tracked.filter(x => x.series && x.series.length > 1);
+    if (withSeries.length) {
+      $("#fchartbox").hidden = false;
+      const labels = [...new Set([...withSeries.flatMap(x => x.series.map(p => p[0])), ...(r.spy || []).map(p => p[0])])].sort();
+      const ds = withSeries.map((x, i) => {
+        const m = new Map(x.series);
+        return {label: x.ticker || x.name, data: labels.map(d => m.get(d) ?? null), borderColor: FAV_COLORS[i % FAV_COLORS.length],
+          pointRadius: 0, borderWidth: 1.8, spanGaps: true};
+      });
+      if (r.spy && r.spy.length) {
+        const m = new Map(r.spy);
+        ds.push({label: "SPY (desde el primer alta)", data: labels.map(d => m.get(d) ?? null), borderColor: css("--muted"),
+          borderDash: [5, 4], pointRadius: 0, borderWidth: 1.5, spanGaps: true});
+      }
+      const grid = {color: css("--line")}, ticks = {color: css("--muted")};
+      favChart = new Chart($("#c6"), {type: "line", data: {labels, datasets: ds}, options: {responsive: true, maintainAspectRatio: false,
+        interaction: {mode: "nearest", intersect: false}, plugins: {legend: {labels: {color: css("--muted")}}},
+        scales: {x: {grid, ticks: {...ticks, maxRotation: 0, autoSkipPadding: 24}}, y: {grid, ticks}}}});
+    }
+  }
+  const maxDate = todayStr();
+  $("#ft").innerHTML = `<tr><th>Ticker</th><th>Empresa</th><th>Añadida</th><th>Precio alta → ahora</th><th>Desde alta</th><th>vs SPY</th>
+    <th>Peor caída</th><th>Gestoras alta → ahora</th><th>Gestoras (5 T)</th><th>2 últimos T vs 2 anteriores</th><th>Desde máx. 52 s</th>
+    <th>Media 200</th><th>Ventas 1 año</th><th>PER fwd</th><th>PEG</th><th></th></tr>` +
     r.rows.map(x => {
       const acc = x.d_recent > x.d_prior && x.d_recent > 0;
+      const dn = x.n_added != null && x.n_now != null ? x.n_now - x.n_added : null;
       return `<tr class="click" data-c="${x.cusip}">
       <td class="tk">${esc(x.ticker || "—")}</td><td class="n">${esc(x.name)}</td>
-      <td>${spark((x.spark || []).slice(-5), 80, 24)}</td><td>${fmt(x.n_now)}</td>
-      <td class="${cls(x.d_filers)}">${sign(x.d_filers)}</td>
+      <td><input type="date" class="fdate" value="${esc(x.added || "")}" max="${maxDate}" title="Fecha de alta: cámbiala si la añadiste antes"></td>
+      <td>${x.price_added == null ? "—" : `${fmtP(x.price_added)} → ${fmtP(x.close)}`}</td>
+      <td class="${cls(x.ret_since)}"><b>${pct(x.ret_since, 1)}</b>${x.days_since != null ? `<div class="sub">${x.days_since} días</div>` : ""}</td>
+      <td class="${cls(x.xs_since)}">${x.xs_since == null ? "—" : sign(x.xs_since, 1) + " pt"}</td>
+      <td class="${x.max_dd_since < 0 ? "neg" : ""}">${pct(x.max_dd_since, 1)}</td>
+      <td>${x.n_added == null ? fmt(x.n_now) : `${fmt(x.n_added)} → ${fmt(x.n_now)} <span class="${cls(dn)}">(${sign(dn)})</span>`}</td>
+      <td>${spark((x.spark || []).slice(-5), 80, 24)}</td>
       <td><span class="${acc ? "pos" : x.d_recent < x.d_prior ? "neg" : ""}">${sign(x.d_recent)} vs ${sign(x.d_prior)}</span></td>
-      <td>${fmtP(x.close)}</td>
       <td>${badgeHTML(highBadge(x)) || pct(x.pct_from_high, 1)}</td>
       <td>${x.above_sma200 == null ? "—" : x.above_sma200 ? '<span class="pos">encima</span>' : '<span class="neg">debajo</span>'}</td>
-      <td class="${cls(x.rs_6m)}">${sign(x.rs_6m)}</td>
       <td class="${cls(x.revenue_growth)}">${pct(x.revenue_growth)}</td>
       <td>${x.fwd_pe == null ? "—" : x.fwd_pe <= 0 ? '<span class="neg">pérd.</span>' : fmt1(x.fwd_pe)}</td>
       <td>${x.peg == null ? "—" : `<span class="${x.peg <= 1 ? "pos" : x.peg > 2 ? "neg" : ""}">${fmt2(x.peg)}</span>`}</td>
@@ -787,13 +857,22 @@ async function loadFavs() {
     }).join("");
   $("#ft").querySelectorAll("tr.click").forEach(tr => {
     const x = r.rows.find(y => y.cusip === tr.dataset.c);
-    tr.querySelector(".star").onclick = e => { e.stopPropagation(); toggleFav({cusip: x.cusip}); loadFavs(); };
+    tr.querySelector(".star").onclick = e => { e.stopPropagation(); toggleFav({cusip: x.cusip}).then(loadFavs); };
+    const di = tr.querySelector(".fdate");
+    di.onclick = e => e.stopPropagation();
+    di.onchange = async () => {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(di.value) || di.value > todayStr()) return;
+      const it = favList.find(y => y.cusip === x.cusip);
+      if (it) { it.added = di.value; await saveFavs(); loadFavs(); }
+    };
     tr.onclick = () => openDetail(x.cusip, x.ticker || x.cusip);
   });
 }
 $("#f-csv").onclick = () => downloadCSV("favoritos_13f.csv", lastFav, [
-  ["ticker", "Ticker"], ["name", "Empresa"], ["n_now", "Gestoras ahora"], ["d_filers", "Netas 1 año"], ["d_recent", "Netas 2 últimos T"],
-  ["d_prior", "Netas 2 T anteriores"], ["close", "Precio"], ["pct_from_high", "% desde máx. 52 s"],
+  ["ticker", "Ticker"], ["name", "Empresa"], ["added", "Añadida"], ["price_added", "Precio alta"], ["close", "Precio ahora"],
+  ["ret_since", "Rentab. desde alta %"], ["spy_since", "SPY mismo periodo %"], ["xs_since", "Diferencia vs SPY pt"],
+  ["max_dd_since", "Peor caída desde alta %"], ["days_since", "Días"], ["n_added", "Gestoras al alta"], ["n_now", "Gestoras ahora"],
+  ["d_recent", "Netas 2 últimos T"], ["d_prior", "Netas 2 T anteriores"], ["pct_from_high", "% desde máx. 52 s"],
   [(r) => r.above_sma200 ? "sí" : "no", "Sobre media 200"], ["rs_6m", "FR 6 m vs SPY"], ["fwd_pe", "PER forward"],
   ["peg", "PEG"], ["revenue_growth", "Ventas 1 año %"], ["cusip", "CUSIP"]]);
 
@@ -949,10 +1028,12 @@ function fromHash() {
   return false;
 }
 window.addEventListener("hashchange", fromHash);
-if (!fromHash()) {
-  const t = store.get("tab13f", "sugerencias");
-  setTab(["sugerencias", "buscar", "ranking", "favoritos"].includes(t) ? t : "sugerencias");
-}
+loadFavList().finally(() => {
+  if (!fromHash()) {
+    const t = store.get("tab13f", "sugerencias");
+    setTab(["sugerencias", "buscar", "ranking", "favoritos"].includes(t) ? t : "sugerencias");
+  }
+});
 </script>
 </body>
 </html>
