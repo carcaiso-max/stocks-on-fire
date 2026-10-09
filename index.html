@@ -99,7 +99,9 @@ tr.click:hover td { background: var(--accent-soft); }
 .sg-h .rk { color: var(--muted); font-size: 12px; width: 18px; }
 .sg-h .tk { font-size: 17px; }
 .sg-h .nm { color: var(--muted); font-size: 12.5px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.score { font-size: 18px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; }
+.score { font-size: 18px; font-weight: 700; color: var(--accent); font-variant-numeric: tabular-nums; text-align: right; line-height: 1.1; }
+.score small { display: block; font-size: 10.5px; font-weight: 500; color: var(--muted); }
+.bars.info { opacity: .45; }
 .bars { display: grid; grid-template-columns: auto 1fr auto; gap: 4px 8px; align-items: center; font-size: 12px; color: var(--muted); }
 .bar { height: 6px; border-radius: 3px; background: var(--panel2); overflow: hidden; }
 .bar i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
@@ -657,7 +659,9 @@ async function loadSug() {
   if (r.error) { $("#s-info").textContent = r.error; $("#sgrid").innerHTML = ""; return; }
   lastSug = r.rows;
   const qs5 = (r.quarters || []).map(qlabel);
-  $("#s-info").textContent = `13F: ${qs5[0] || ""} → ${qs5.at(-1) || ""} · precios al ${r.price_date} · ${r.rows.length} resultados`;
+  const accProfile = qs.get("profile") === "aceleracion";
+  $("#s-info").textContent = `13F: ${qs5[0] || ""} → ${qs5.at(-1) || ""} · precios al ${r.price_date} · ${r.rows.length} resultados` +
+    (accProfile ? " · ordenadas por aceleración; las barras 13F y Técnico son informativas y no puntúan en este perfil" : "");
   if (!r.rows.length) { $("#sgrid").innerHTML = '<div class="empty">Ninguna acción cumple los filtros.</div>'; return; }
   $("#sgrid").innerHTML = r.rows.map((x, i) => {
     const acc = x.d_recent > x.d_prior && x.d_recent > 0;
@@ -674,9 +678,11 @@ async function loadSug() {
     ].filter(Boolean);
     return `<div class="sg" data-c="${x.cusip}" data-t="${esc(x.ticker)}">
       <div class="sg-h"><span class="rk">${i + 1}</span><span class="tk">${esc(x.ticker)}</span><span class="nm" title="${esc(x.name)}">${esc(x.name)}</span>
-        <span class="score" title="Puntuación global">${Math.round(x.score)}</span>
+        ${accProfile
+          ? `<span class="score" title="Aceleración de gestoras: (netas de los 2 últimos trimestres − netas de los 2 anteriores) ÷ gestoras de hace un año. ${fmt(x.d_recent)} frente a ${fmt(x.d_prior)} sobre ${fmt(x.n_before)}.">${sign(x.accel)} %<small>aceleración</small></span>`
+          : `<span class="score" title="Puntuación global (0–100)">${Math.round(x.score)}<small>puntuación</small></span>`}
         <button type="button" class="star" data-c="${x.cusip}">☆</button></div>
-      <div class="bars"><span>13F</span><div class="bar"><i style="width:${x.s13}%"></i></div><span>${Math.round(x.s13)}</span>
+      <div class="bars${accProfile ? " info" : ""}" title="${accProfile ? "Informativas: no puntúan en el perfil Solo aceleración" : ""}"><span>13F</span><div class="bar"><i style="width:${x.s13}%"></i></div><span>${Math.round(x.s13)}</span>
         <span>Técnico</span><div class="bar"><i style="width:${x.stech}%"></i></div><span>${Math.round(x.stech)}</span></div>
       <div class="sprow">${spark(x.spark.slice(-5))}<span>${fmt(x.n_before)} → <b style="color:var(--text)">${fmt(x.n_now)}</b> gestoras ·
         ${fmtP(x.close)} $ · ${pct(x.pct_from_high, 1)} del máx. intradía · ${fmtLiq(x.dollar_vol)}/día · ${peText(x)}${x.revenue_growth == null ? "" : " · ventas " + pct(x.revenue_growth)}</span></div>
@@ -694,7 +700,7 @@ async function loadSug() {
 $("#s-csv").onclick = () => downloadCSV("stocks_on_fire.csv", lastSug, [
   [(r) => lastSug.indexOf(r) + 1, "#"], ["ticker", "Ticker"], ["name", "Empresa"], ["score", "Puntuación"], ["s13", "13F"], ["stech", "Técnico"],
   ["n_before", "Gestoras hace 1 año"], ["n_now", "Gestoras ahora"], ["d_filers", "Netas 1 año"], ["pct_filers", "% gestoras"],
-  ["d_recent", "Netas 2 últimos T"], ["d_prior", "Netas 2 T anteriores"], ["consistency", "Trimestres al alza (de 4)"],
+  ["accel", "Aceleración %"], ["d_recent", "Netas 2 últimos T"], ["d_prior", "Netas 2 T anteriores"], ["consistency", "Trimestres al alza (de 4)"],
   ["pct_shares", "% acciones en manos de gestoras"], ["entries_conv", "Entradas con convicción"], ["buyers", "Compran"],
   ["sellers", "Venden"], ["close", "Precio"], ["pct_from_high", "% desde máx. 52 s"], ["vol_ratio", "Volumen 10d / 50d"], ["fwd_pe", "PER forward"], ["pe", "PER actual"], ["eps_growth", "BPA esperado %"], ["peg", "PEG"],
   ["revenue_growth", "Ventas 1 año % (SEC)"], ["ni_growth", "Beneficio 1 año % (SEC)"], ["net_margin", "Margen neto % (SEC)"],
