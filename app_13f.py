@@ -3,9 +3,11 @@
 Uso:
     python app_13f.py        abre http://127.0.0.1:8613
 """
+import gzip
 import json
 import os
 import re
+import socket
 import sys
 import sqlite3
 import subprocess
@@ -34,6 +36,7 @@ TICKERS_FILE = DATA_DIR / "company_tickers.json"
 FIGI_CACHE_FILE = DATA_DIR / "figi_cache.json"
 OPENFIGI_URL = "https://api.openfigi.com/v3/mapping"
 
+MIN_PRICE = 5
 FUND_TYPES = {"ETP", "Mutual Fund", "Closed-End Fund", "Unit Inv Tr", "Open-End Fund", "ETF", "ETN"}
 FUND_NAME_RE = (r"ETFS?|ETN|ISHARES|SPDR|PROSHARES|VANECK|WISDOMTREE|DIREXION|SELECT SECTOR|"
                 r"FDS?|FUNDS?|INDEX F|EXCHANGE TRADED|INVESCO QQQ|GLOBAL X|ETF TR")
@@ -257,6 +260,7 @@ class Store:
             t = t[t["above_sma200"].fillna(False).astype(bool)]
         if min_liq:
             t = t[t["dollar_vol"].fillna(0) >= min_liq * 1e6]
+        t = t[t["close"].fillna(0) >= MIN_PRICE]
         if max_pe:
             t = t[t["fwd_pe"].notna() & (t["fwd_pe"] > 0) & (t["fwd_pe"] <= max_pe)]
         if max_peg:
@@ -719,6 +723,13 @@ class Server(ThreadingHTTPServer):
     allow_reuse_port = False
     daemon_threads = True
 
+    def get_request(self):
+        """Búfer de envío amplio: en Windows, respuestas de más de 64 KB a veces se atascaban a medio enviar."""
+        sock, addr = super().get_request()
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, 4 << 20)
+        sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        return sock, addr
+
 
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
@@ -726,9 +737,16 @@ class Handler(BaseHTTPRequestHandler):
 
     def send(self, code, body, ctype="application/json; charset=utf-8"):
         data = body if isinstance(body, bytes) else json.dumps(body, default=str).encode()
+        gz = len(data) > 1024 and "gzip" in (self.headers.get("Accept-Encoding") or "")
+        if gz:
+            data = gzip.compress(data, 6)
         self.send_response(code)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(data)))
+        if gz:
+            self.send_header("Content-Encoding", "gzip")
+            self.send_header("Vary", "Accept-Encoding")
+        self.send_header("Cache-Control", "no-store")
         self.end_headers()
         self.wfile.write(data)
 
@@ -769,10 +787,10 @@ class Handler(BaseHTTPRequestHandler):
             elif url.path == "/api/suggest":
                 g = lambda k, d: qs.get(k, [d])[0]
                 self.send(200, STORE.suggestions(int(g("min", "100")), min(int(g("n", "20")), 50),
-                                                 g("profile", "equilibrado"), g("high", "0") == "1", g("up", "0") == "1",
-                                                 float(g("liq", "0")), float(g("pe", "0")),
+                                                 g("profile", "aceleracion"), g("high", "0") == "1", g("up", "0") == "1",
+                                                 float(g("liq", "5")), float(g("pe", "0")),
                                                  float(g("peg", "0")),
-                                                 None if g("rev", "") in ("", "none") else float(g("rev", ""))))
+                                                 None if g("rev", "10") in ("", "none") else float(g("rev", "10"))))
             elif url.path == "/api/tech":
                 cusip = qs.get("cusip", [""])[0].upper()
                 self.send(200, STORE.tech(cusip) if cusip in STORE.sec.index else {"error": "CUSIP no encontrado"})

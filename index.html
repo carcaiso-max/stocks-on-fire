@@ -170,7 +170,7 @@ tr.click:hover td { background: var(--accent-soft); }
         <label>Mínimo de gestoras hace un año
           <select id="s-min"><option>50</option><option selected>100</option><option>250</option><option>500</option><option>1000</option></select></label>
         <label>Liquidez mínima (volumen medio diario)
-          <select id="s-liq"><option value="0">Sin mínimo</option><option value="5">5 M$</option><option value="20" selected>20 M$</option>
+          <select id="s-liq"><option value="0">Sin mínimo</option><option value="5" selected>5 M$</option><option value="20">20 M$</option>
             <option value="50">50 M$</option><option value="100">100 M$</option><option value="500">500 M$</option></select></label>
         <label>Ventas (SEC) crecen más de
           <select id="s-rev"><option value="none">Sin filtro</option><option value="0">0 %</option>
@@ -200,6 +200,8 @@ tr.click:hover td { background: var(--accent-soft); }
         <span class="bd pos">Nuevo máximo</span> marcó máximo hace poco y sigue a ≤5 % ·
         <span class="bd warn">Ruptura devuelta</span> marcó máximo pero ya ha caído más de un 5 % ·
         <span class="bd acc">Cerca de máximos</span> a ≤5 % sin ruptura reciente.</p>
+        <p><b>Valores por defecto</b> = los de la estrategia del backtest: perfil «Solo aceleración», ventas &gt;10 %, al menos 100 gestoras hace un año,
+        liquidez ≥5 M$/día, precio ≥5 $ y las 20 primeras, sin más filtros. Cambiarlos sirve para explorar, pero ya no es lo que se probó.</p>
         <p>Se puntúan técnicamente las 120 mejores por 13F; ETF y fondos excluidos. Convicción, compradores/vendedores y volumen se muestran como información, pero no puntúan.</p>
         <p><b>Perfil «Solo aceleración» + ventas que crecen más del 10 %</b>: es la única combinación que el backtest 2014–2026 encontró mejor que el
         S&amp;P 500 ajustando por riesgo. Top 20 por aceleración con ventas (estados financieros de la SEC, últimos 12 meses) creciendo &gt;10 %,
