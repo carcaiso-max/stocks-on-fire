@@ -465,3 +465,10 @@ if __name__ == "__main__":
         insiders.build()
     except Exception as e:
         log(f"aviso: no se pudo actualizar la tabla de directivos: {e}")
+    import fundamentales
+    try:
+        if not args.no_download:
+            fundamentales.download()
+        fundamentales.build()
+    except Exception as e:
+        log(f"aviso: no se pudo actualizar la tabla de fundamentales: {e}")

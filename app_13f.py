@@ -20,6 +20,7 @@ from urllib.parse import parse_qs, urlparse
 import numpy as np
 import pandas as pd
 
+import fundamentales
 import precios
 import valoracion
 import insiders
@@ -89,6 +90,8 @@ def reasons(r):
         out.append(f"{estado}: máximo {cuando}, ahora a {r['pct_from_high']:.1f} %".replace(".", ","))
     elif r.get("pct_from_high") is not None:
         out.append(f"a {abs(r['pct_from_high']):.0f} % del máximo de 52 semanas")
+    if r.get("revenue_growth") is not None and r["revenue_growth"] == r["revenue_growth"]:
+        out.append(f"ventas {r['revenue_growth']:+.0f} % en un año (estados financieros SEC)")
     if r.get("fwd_pe") is not None and r["fwd_pe"] == r["fwd_pe"] and r["fwd_pe"] <= 0:
         out.append("los analistas esperan pérdidas el próximo año (sin PER forward)")
     elif r.get("fwd_pe") is not None and r["fwd_pe"] == r["fwd_pe"]:
@@ -167,6 +170,38 @@ class Store:
         t = t[(t["horizon"] == horizon) & (t["n_before"] >= min_base)]
         return t[~t["name"].fillna("").str.contains(FUND_NAME_RE, regex=True)]
 
+    def sec_metrics(self, tickers):
+        """Crecimiento de ventas y beneficio, y margen, de los estados financieros de la SEC (caché de 6 horas)."""
+        now = time.time()
+        if not hasattr(self, "_sec_cache"):
+            self._sec_cache = {}
+        keys = {tk: re.sub(r"[./ -]", ".", tk.upper()) for tk in tickers if tk}
+        missing = [k for k in set(keys.values()) if now - self._sec_cache.get(k, (0, None))[0] > 6 * 3600]
+        if missing:
+            con = self.con()
+            try:
+                marks = ",".join("?" * len(missing))
+                m = pd.read_sql(f"SELECT ticker, cik FROM cik_tickers WHERE ticker IN ({marks})", con, params=missing)
+                ciks = [int(c) for c in m["cik"].unique()]
+                facts = pd.read_sql(f"SELECT cik, metric, end, filed, value FROM fund_facts WHERE cik IN ({','.join('?' * len(ciks))}) "
+                                    "AND metric IN ('revenue', 'net_income')", con, params=ciks,
+                                    parse_dates=["end", "filed"]) if ciks else pd.DataFrame()
+            except Exception:
+                m, facts = pd.DataFrame(columns=["ticker", "cik"]), pd.DataFrame()
+            finally:
+                con.close()
+            by_cik = dict(tuple(facts.groupby("cik"))) if not facts.empty else {}
+            today = pd.Timestamp.today()
+            tk2cik = dict(zip(m["ticker"], m["cik"]))
+            for k in missing:
+                g = by_cik.get(tk2cik.get(k))
+                snap = fundamentales.snapshot(g, today) if g is not None else {}
+                clean = lambda v: None if v is None or (isinstance(v, float) and not np.isfinite(v)) else float(v)
+                self._sec_cache[k] = (now, {"revenue_growth": clean(snap.get("revenue_growth")),
+                                            "ni_growth": clean(snap.get("net_income_growth")),
+                                            "net_margin": clean(snap.get("net_margin"))})
+        return {tk: self._sec_cache.get(k, (0, {}))[1] for tk, k in keys.items()}
+
     def tickers_for(self, cusips, stocks_only=True):
         info = self.cusip_info(list(cusips))
         out = {}
@@ -177,7 +212,8 @@ class Store:
             out[c] = inf.get("ticker") or self.name_to_ticker.get(norm_name(self.sec["name"].get(c, "")))
         return out
 
-    def suggestions(self, min_base, n, profile, only_high, only_up, min_liq=0.0, max_pe=0.0, max_peg=0.0):
+    def suggestions(self, min_base, n, profile, only_high, only_up, min_liq=0.0, max_pe=0.0, max_peg=0.0,
+                    min_rev_growth=None):
         t = self.stock_universe(min_base)
         if t.empty:
             return {"rows": [], "error": "Falta la tabla de tendencias: ejecuta python build_13f.py --trends-only"}
@@ -185,10 +221,17 @@ class Store:
         pr = lambda s: s.rank(pct=True).fillna(0)
         t["s13"] = (0.25 * pr(t["d_filers"]) + 0.20 * pr(t["pct_filers"]) + 0.25 * pr(t["accel"])
                     + 0.15 * pr(t["pct_shares"].clip(-100, 300)) + 0.15 * t["consistency"] / 4) * 100
-        t = t.sort_values("s13", ascending=False).head(150)
+        t = t.sort_values("accel" if profile == "aceleracion" else "s13", ascending=False)
+        t = t.head(400 if min_rev_growth is not None else 150)
         tick = {c: tk for c, tk in self.tickers_for(t["cusip"].tolist()).items() if tk}
-        t = t[t["cusip"].isin(tick)].head(120).copy()
+        t = t[t["cusip"].isin(tick)].copy()
         t["ticker"] = t["cusip"].map(tick)
+        sm = self.sec_metrics(t["ticker"].tolist())
+        t = t.join(pd.DataFrame([sm.get(x, {}) for x in t["ticker"]], index=t.index)
+                   .reindex(columns=["revenue_growth", "ni_growth", "net_margin"]))
+        if min_rev_growth is not None:
+            t = t[t["revenue_growth"] > min_rev_growth]
+        t = t.head(120)
         hist = precios.many(t["ticker"].tolist() + [precios.BENCH])
         bench = hist.get(precios.BENCH)
         tech = {tk: precios.technicals(df, bench) for tk, df in hist.items() if df is not None and tk != precios.BENCH}
@@ -203,8 +246,11 @@ class Store:
         trend = (t["above_sma200"].fillna(False).astype(float) + t["trend_up"].fillna(False).astype(float)) / 2
         live_breakout = (t["breakout"] & (t["pct_from_high"] >= -5)) | t["close_high"]
         t["stech"] = (0.35 * prox + 0.25 * trend + 0.30 * pr(t["rs_6m"]) + 0.10 * live_breakout.astype(float)) * 100
-        w = {"equilibrado": 0.6, "13f": 1.0, "tecnico": 0.4}.get(profile, 0.6)
-        t["score"] = w * t["s13"] + (1 - w) * t["stech"]
+        if profile == "aceleracion":
+            t["score"] = pr(t["accel"]) * 100
+        else:
+            w = {"equilibrado": 0.6, "13f": 1.0, "tecnico": 0.4}.get(profile, 0.6)
+            t["score"] = w * t["s13"] + (1 - w) * t["stech"]
         if only_high:
             t = t[t["pct_from_high"] >= -5]
         if only_up:
@@ -223,7 +269,7 @@ class Store:
                 "d_recent", "d_prior", "accel", "consistency", "pct_shares", "split", "spark", "close", "pct_from_high",
                 "days_since_high", "breakout", "close_high", "at_high", "above_sma200", "trend_up", "ret_6m", "rs_6m",
                 "entries", "entries_conv", "buyers", "sellers", "vol_ratio", "dollar_vol", "fwd_pe", "pe", "eps_growth", "peg",
-                "reasons")
+                "revenue_growth", "ni_growth", "net_margin", "reasons")
         rows = []
         for r in t.to_dict("records"):
             r["reasons"] = reasons(r)
@@ -239,6 +285,37 @@ class Store:
             return {"ticker": tk, "tech": None, "series": []}
         return {"ticker": tk, "tech": precios.technicals(df, precios.history(precios.BENCH)),
                 "series": precios.weekly_series(df), "val": valoracion.fetch([tk]).get(tk, {})}
+
+    def fundamentals(self, cusip):
+        """Últimos 12 meses según los estados financieros de la SEC, más la evolución trimestral de ventas y beneficio."""
+        tk = self.tickers_for([cusip], stocks_only=False).get(cusip)
+        if not tk:
+            return {"error": "Sin ticker para esta acción"}
+        con = self.con()
+        try:
+            key = re.sub(r"[./ -]", ".", tk.upper())
+            row = con.execute("SELECT cik FROM cik_tickers WHERE ticker IN (?, ?)", (key, key.replace(".", ""))).fetchone()
+            if not row:
+                return {"ticker": tk, "error": "Sin estados financieros en la SEC (¿empresa extranjera?)"}
+            facts = pd.read_sql("SELECT metric, end, filed, value FROM fund_facts WHERE cik = ?", con, params=[row[0]],
+                                parse_dates=["end", "filed"])
+        except Exception:
+            return {"ticker": tk, "error": "Falta la tabla de fundamentales: ejecuta python fundamentales.py"}
+        finally:
+            con.close()
+        if facts.empty:
+            return {"ticker": tk, "error": "Sin estados financieros en la SEC"}
+        mcap = valoracion.fetch([tk], with_profile=False).get(tk, {}).get("market_cap")
+        snap = fundamentales.snapshot(facts, pd.Timestamp.today(), mcap)
+        hist = []
+        for m in ("revenue", "net_income"):
+            s = facts[facts["metric"] == m].sort_values(["end", "filed"]).drop_duplicates("end", keep="last").tail(12)
+            hist += [{"metric": m, "end": e.strftime("%Y-%m-%d"), "value": float(v)} for e, v in zip(s["end"], s["value"])]
+        last = facts[facts["metric"] == "revenue"].sort_values("end").tail(1)
+        snap = {k: (v.strftime("%Y-%m-%d") if isinstance(v, pd.Timestamp)
+                    else None if isinstance(v, float) and not np.isfinite(v) else v) for k, v in snap.items()}
+        return {"ticker": tk, "cik": int(row[0]), "mcap": mcap, "snap": snap, "history": hist,
+                "filed": last["filed"].iloc[0].strftime("%Y-%m-%d") if len(last) else None}
 
     def insiders(self, cusip):
         """Compras y ventas de directivos en mercado abierto (formulario 4) de los últimos 24 meses."""
@@ -297,6 +374,7 @@ class Store:
         hist = precios.many([x for x in t["ticker"] if x] + [precios.BENCH])
         bench = hist.get(precios.BENCH)
         val = valoracion.fetch([x for x in t["ticker"] if x])
+        sec = self.sec_metrics([x for x in t["ticker"] if x])
         keys = ("cusip", "ticker", "name", "n_now", "d_filers", "pct_filers", "d_recent", "d_prior", "accel",
                 "consistency", "pct_shares", "spark", "close", "pct_from_high", "days_since_high", "breakout", "close_high",
                 "above_sma200", "ret_6m", "rs_6m", "entries_conv", "buyers", "sellers", "vol_ratio", "dollar_vol",
@@ -307,7 +385,8 @@ class Store:
             if df is not None:
                 r.update(precios.technicals(df, bench))
             r.update(val.get(r["ticker"], {}) if r["ticker"] else {})
-            rows.append({k: r.get(k) for k in keys})
+            r.update(sec.get(r["ticker"], {}) if r["ticker"] else {})
+            rows.append({k: r.get(k) for k in keys + ("revenue_growth",)})
         order = {c: i for i, c in enumerate(cusips)}
         rows.sort(key=lambda r: order.get(r["cusip"], 0))
         return {"rows": json.loads(pd.DataFrame(rows).to_json(orient="records"))}
@@ -427,6 +506,9 @@ class Store:
         for r in rows:
             v = val.get(r["ticker"], {}) if r["ticker"] else {}
             r["fwd_pe"], r["peg"] = v.get("fwd_pe"), v.get("peg")
+        sm = self.sec_metrics([r["ticker"] for r in rows if r["ticker"]])
+        for r in rows:
+            r["revenue_growth"] = sm.get(r["ticker"], {}).get("revenue_growth") if r["ticker"] else None
         first = t.iloc[0] if len(t) else None
         return {"rows": json.loads(pd.DataFrame(rows).to_json(orient="records")) if rows else [],
                 "period": first["period"] if first is not None else None,
@@ -689,10 +771,14 @@ class Handler(BaseHTTPRequestHandler):
                 self.send(200, STORE.suggestions(int(g("min", "100")), min(int(g("n", "20")), 50),
                                                  g("profile", "equilibrado"), g("high", "0") == "1", g("up", "0") == "1",
                                                  float(g("liq", "0")), float(g("pe", "0")),
-                                                 float(g("peg", "0"))))
+                                                 float(g("peg", "0")),
+                                                 None if g("rev", "") in ("", "none") else float(g("rev", ""))))
             elif url.path == "/api/tech":
                 cusip = qs.get("cusip", [""])[0].upper()
                 self.send(200, STORE.tech(cusip) if cusip in STORE.sec.index else {"error": "CUSIP no encontrado"})
+            elif url.path == "/api/fund":
+                cusip = qs.get("cusip", [""])[0].upper()
+                self.send(200, STORE.fundamentals(cusip) if cusip in STORE.sec.index else {"error": "CUSIP no encontrado"})
             elif url.path == "/api/insiders":
                 cusip = qs.get("cusip", [""])[0].upper()
                 self.send(200, STORE.insiders(cusip) if cusip in STORE.sec.index else {"error": "CUSIP no encontrado"})

@@ -1,0 +1,49 @@
+Panel: 82,598 obs · con capitalización 84% · con E/P 80% · con PEG histórico 37%
+Cobertura de E/P por año: 2014: 81%, 2015: 82%, 2016: 82%, 2017: 81%, 2018: 80%, 2019: 80%, 2020: 79%, 2021: 80%, 2022: 79%, 2023: 79%, 2024: 78%, 2025: 78%, 2026: 79%
+
+=== Exceso vs SPY 3m por quintiles (Q1 = valor más bajo, Q5 = más alto) ===
+métrica                                 Q1      Q2      Q3      Q4      Q5   Q5-Q1      t  %T>0
+Rentab. beneficio (E/P)               1.94   -0.11   -0.56   -0.41   -0.53   -2.47  -2.25   42%
+Rentab. flujo caja libre              0.96    0.02   -0.34   -0.42    0.08   -0.88  -0.86   33%
+Valor contable / capitalización       0.90    0.05   -0.30   -0.58    0.31   -0.58  -0.56   44%
+Crecimiento ventas 1 año              0.66   -0.20   -0.17   -0.05    0.47   -0.19  -0.21   56%
+Crecimiento beneficio 1 año           0.32   -0.43   -0.39   -0.39   -0.63   -0.95  -1.45   42%
+Margen neto                           1.86    0.12   -0.46   -0.27   -0.49   -2.35  -2.03   44%
+PEG histórico (invertido: más alto   -0.54   -0.25   -0.54   -0.09   -0.75   -0.20  -0.35   52%
+
+=== Exceso vs SPY 6m por quintiles (Q1 = valor más bajo, Q5 = más alto) ===
+métrica                                 Q1      Q2      Q3      Q4      Q5   Q5-Q1      t  %T>0
+Rentab. beneficio (E/P)               3.84   -0.68   -1.42   -1.26   -1.34   -5.19  -3.27   30%
+Rentab. flujo caja libre              1.36    0.25   -1.01   -1.39   -0.12   -1.48  -0.92   34%
+Valor contable / capitalización       1.65   -0.38   -1.01   -1.30    0.17   -1.48  -0.89   36%
+Crecimiento ventas 1 año              0.98   -0.62   -0.57   -0.34    0.91   -0.07  -0.05   57%
+Crecimiento beneficio 1 año           0.47   -1.15   -1.17   -1.12   -1.41   -1.88  -1.71   40%
+Margen neto                           3.57    0.08   -1.47   -0.61   -1.26   -4.82  -2.76   49%
+PEG histórico (invertido: más alto   -1.61   -1.06   -0.99   -0.61   -1.59    0.02   0.03   43%
+
+=== Por tramos: Q5-Q1 a 6 meses (t) ===
+Rentab. beneficio (E/P)            2014-2017:  -3.29 (-1.93)  2018-2021:  -7.44 (-2.18)  2022-2026:  -4.71 (-1.68)
+Rentab. flujo caja libre           2014-2017:  -0.44 (-0.34)  2018-2021:   0.45 ( 0.12)  2022-2026:  -4.39 (-1.67)
+PEG histórico (invertido: más alto 2014-2017:  -2.28 (-1.95)  2018-2021:  -0.92 (-0.54)  2022-2026:   3.12 ( 2.51)
+Crecimiento ventas 1 año           2014-2017:  -0.50 (-0.33)  2018-2021:  -2.51 (-0.67)  2022-2026:   2.77 ( 2.01)
+
+=== Top 20 por aceleración con filtros de valoración (exceso sobre el universo, 6 m) ===
+sin filtro                                 3.61 pt  t  2.23  gana  62%  (47 trimestres)
+con beneficios (E/P > 0)                   0.26 pt  t  0.17  gana  49%  (47 trimestres)
+mitad barata (E/P ≥ mediana)              -0.64 pt  t -0.59  gana  43%  (47 trimestres)
+mitad cara (E/P < mediana o pérdidas)      1.69 pt  t  1.17  gana  49%  (47 trimestres)
+flujo de caja libre > 0                    2.17 pt  t  1.57  gana  51%  (47 trimestres)
+PEG histórico ≤ 1,5                        1.12 pt  t  0.87  gana  53%  (47 trimestres)
+ventas crecen > 10 %                       5.50 pt  t  3.08  gana  64%  (47 trimestres)
+
+=== Cartera (top 20 aceleración, 6 m, coste 0,25 %/lado, ≥5 M$/día, precio ≥5 $) ===
+                                    CAGR %  vol %  Sharpe  MDD %  x final  CAGR 2014-2017  CAGR 2018-2021  CAGR 2022-2026
+cartera                                                                                                                  
+SPY                                  11.96  17.45    0.74 -34.10     3.94            9.38           15.32           10.77
+Top 20 aceleración                   14.86  28.36    0.63 -48.21     5.37            6.39           18.50           17.74
+Top 20 aceleración con E/P > 0        9.86  24.64    0.51 -47.46     3.13            6.24           11.45           11.07
+Top 20 aceleración mitad barata       9.03  23.18    0.49 -50.15     2.85            4.46           10.56           10.87
+Top 20 aceleración con FCF > 0       12.89  24.91    0.61 -46.27     4.36            8.03           20.11           10.26
+Top 20 aceleración PEG hist. ≤ 1,5   10.76  23.60    0.55 -51.28     3.46            5.98           11.69           13.32
+Top 20 más baratas (E/P)              2.95  26.62    0.24 -68.39     1.42            4.65           -1.12            4.87
+Universo (todas, iguales)             8.97  19.65    0.54 -41.17     2.84            9.36           13.07            5.09

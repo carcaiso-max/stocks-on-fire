@@ -143,7 +143,7 @@ tr.click:hover td { background: var(--accent-soft); }
     <div class="card">
       <h2>Bienvenido a Stocks on fire</h2>
       <p>Para empezar hay que descargar los datos públicos de la SEC: los informes 13F de las gestoras desde 2013 y las compras y ventas
-        de directivos desde 2006. Son unos <b>4 GB</b> y la primera vez tarda entre <b>30 y 60 minutos</b>. Después, las actualizaciones solo bajan lo nuevo.</p>
+        de directivos desde 2006, y los estados financieros de las empresas. Son unos <b>5,5 GB</b> y la primera vez tarda alrededor de <b>una hora</b>. Después, las actualizaciones solo bajan lo nuevo.</p>
       <p class="sub">Los datos se guardan en tu ordenador. La app funciona en local: no hay servidores ni cuentas.</p>
       <div id="setup-id"></div>
       <div id="setup-go" style="margin-top:12px"></div>
@@ -162,7 +162,8 @@ tr.click:hover td { background: var(--accent-soft); }
       <div class="ctrls">
         <label>Peso de la puntuación
           <select id="s-profile">
-            <option value="13f" selected>Solo 13F (la más estable en el backtest)</option>
+            <option value="aceleracion" selected>Solo aceleración (la estrategia del backtest)</option>
+            <option value="13f">Solo 13F (puntuación combinada)</option>
             <option value="equilibrado">Equilibrado (60 % 13F · 40 % técnico)</option>
             <option value="tecnico">Más técnico (40 % 13F · 60 % técnico)</option>
           </select></label>
@@ -171,6 +172,9 @@ tr.click:hover td { background: var(--accent-soft); }
         <label>Liquidez mínima (volumen medio diario)
           <select id="s-liq"><option value="0">Sin mínimo</option><option value="5">5 M$</option><option value="20" selected>20 M$</option>
             <option value="50">50 M$</option><option value="100">100 M$</option><option value="500">500 M$</option></select></label>
+        <label>Ventas (SEC) crecen más de
+          <select id="s-rev"><option value="none">Sin filtro</option><option value="0">0 %</option>
+            <option value="10" selected>10 %</option><option value="20">20 %</option></select></label>
         <label>PER forward máximo
           <select id="s-pe"><option value="0" selected>Sin límite</option><option>10</option><option>15</option><option>20</option>
             <option>30</option><option>50</option></select></label>
@@ -197,6 +201,12 @@ tr.click:hover td { background: var(--accent-soft); }
         <span class="bd warn">Ruptura devuelta</span> marcó máximo pero ya ha caído más de un 5 % ·
         <span class="bd acc">Cerca de máximos</span> a ≤5 % sin ruptura reciente.</p>
         <p>Se puntúan técnicamente las 120 mejores por 13F; ETF y fondos excluidos. Convicción, compradores/vendedores y volumen se muestran como información, pero no puntúan.</p>
+        <p><b>Perfil «Solo aceleración» + ventas que crecen más del 10 %</b>: es la única combinación que el backtest 2014–2026 encontró mejor que el
+        S&amp;P 500 ajustando por riesgo. Top 20 por aceleración con ventas (estados financieros de la SEC, últimos 12 meses) creciendo &gt;10 %,
+        6 meses por posición, coste 0,25 %: 19,7 % anual frente a 12,0 % de SPY, Sharpe 0,78 frente a 0,74, caída máxima −46 % frente a −34 %;
+        supera a SPY en los tres tramos (2014–17, 2018–21, 2022–26) y en 8 de 12 años; sin 2020, 16,5 % frente a 11,3 %. Funciona igual con umbrales
+        del 0 % o del 20 %. Aun así: es más volátil que el índice, se probaron varias combinaciones antes de dar con esta (riesgo de que sea casualidad)
+        y hay sesgo de supervivencia. Valoración barata (PER bajo, flujo de caja, valor contable) <b>empeoró</b> los resultados en este periodo.</p>
         <p><b>Valoración</b> (Yahoo Finance, estimaciones de analistas): PER forward = precio ÷ beneficio por acción esperado el próximo año;
         PEG = PER ÷ crecimiento anual esperado del beneficio a 5 años (por debajo de 1 se suele leer como barata para lo que crece; por encima de 2, cara).
         Si los analistas esperan pérdidas no hay PER forward ni PEG con sentido. Es solo informativa y no puntúa: no existe histórico gratuito de
@@ -235,6 +245,13 @@ tr.click:hover td { background: var(--accent-soft); }
         <div class="kpis" id="vkpis" style="margin-top:0"></div>
         <div class="sub" style="margin-top:8px">Datos de Yahoo Finance. Solo informativos: las estimaciones suelen ser optimistas y no hay histórico gratuito para
           validarlas. Compara siempre con empresas del mismo sector: un PER de 30 es caro para un banco y normal para un software.</div>
+      </div>
+      <div class="card" id="fundcard">
+        <h2 id="fundh">Fundamentales (SEC)</h2>
+        <div class="kpis" id="fkpis" style="margin-top:0"></div>
+        <div class="chart" style="margin-top:14px;height:220px"><canvas id="c5"></canvas></div>
+        <div class="sub" style="margin-top:8px">Cifras de los últimos 12 meses según los estados financieros presentados a la SEC (10-K y 10-Q).
+          PER y rentabilidades usan la capitalización actual de Yahoo. PEG histórico = PER ÷ crecimiento real del beneficio en el último año.</div>
       </div>
       <div class="card" id="inscard">
         <h2 id="insh">Directivos (formulario 4)</h2>
@@ -451,15 +468,17 @@ async function show(cusip, redraw) {
   let d = current && current.cusip === cusip && redraw ? current.d : null;
   let tech = current && current.cusip === cusip && redraw ? current.tech : null;
   let ins = current && current.cusip === cusip && redraw ? current.ins : null;
+  let fund = current && current.cusip === cusip && redraw ? current.fund : null;
   if (!d) {
-    [d, tech, ins] = await Promise.all([
+    [d, tech, ins, fund] = await Promise.all([
       fetch("/api/security?cusip=" + cusip).then(r => r.json()),
       fetch("/api/tech?cusip=" + cusip).then(r => r.json()).catch(() => null),
       fetch("/api/insiders?cusip=" + cusip).then(r => r.json()).catch(() => null),
+      fetch("/api/fund?cusip=" + cusip).then(r => r.json()).catch(() => null),
     ]);
   }
   if (d.error) { $("#msg").textContent = "Error: " + d.error; return; }
-  current = {cusip, d, tech, ins};
+  current = {cusip, d, tech, ins, fund};
   $("#out").hidden = false;
   $("#meta").textContent = `Datos SEC hasta el trimestre ${qlabel(d.last_period)} · base construida ${d.built_at}`;
   $("#name").textContent = d.name;
@@ -567,6 +586,33 @@ async function show(cusip, redraw) {
       <td class="${cls(x.pct_change)}">${x.pct_change == null ? "—" : pct(x.pct_change, 1)}</td></tr>`).join("") : "";
   }
 
+  const fs = fund && !fund.error && fund.snap;
+  $("#fundcard").hidden = !fs;
+  if (fs) {
+    $("#fundh").textContent = `Fundamentales (SEC) · 12 meses hasta ${fs.revenue_end || fs.net_income_end || "—"}` +
+      (fund.filed ? ` · publicado ${fund.filed}` : "");
+    const g = v => v == null ? "" : `<span class="${cls(v)}">${pct(v)}</span> en un año`;
+    const fcf = fs.fcf;
+    $("#fkpis").innerHTML = [
+      ["Ventas", fs.revenue == null ? "—" : fmtMoney(fs.revenue), g(fs.revenue_growth)],
+      ["Beneficio neto", fs.net_income == null ? "—" : `<span class="${cls(fs.net_income)}">${fs.net_income < 0 ? "−" : ""}${fmtMoney(Math.abs(fs.net_income))}</span>`,
+        fs.net_income_growth == null ? (fs.net_income < 0 ? "pérdidas" : "") : g(fs.net_income_growth)],
+      ["Margen neto", fs.net_margin == null ? "—" : `<span class="${cls(fs.net_margin)}">${pct(fs.net_margin, 1).replace("+", "")}</span>`, ""],
+      ["Flujo de caja libre", fcf == null ? "—" : `<span class="${cls(fcf)}">${fcf < 0 ? "−" : ""}${fmtMoney(Math.abs(fcf))}</span>`,
+        fs.fcf_yield == null ? "" : `rentabilidad ${pct(fs.fcf_yield, 1).replace("+", "")} sobre la capitalización`],
+      ["PER (SEC)", fs.pe_sec == null ? (fs.net_income < 0 ? '<span class="neg">pérdidas</span>' : "—") : fmt1(fs.pe_sec),
+        fs.peg_hist == null ? "" : `PEG histórico <b class="${fs.peg_hist <= 1 ? "pos" : fs.peg_hist > 2 ? "neg" : ""}">${fmt2(fs.peg_hist)}</b>`],
+      ["Valor contable / capitalización", fs.bm == null ? "—" : fmt2(fs.bm), fs.equity == null ? "" : `patrimonio ${fmtMoney(Math.abs(fs.equity))}`],
+    ].map(([l, v, sub]) => `<div class="kpi"><div class="l">${l}</div><div class="v">${v}</div><div class="s">${sub}</div></div>`).join("");
+    const hv = m => fund.history.filter(h => h.metric === m);
+    const labs = [...new Set(fund.history.map(h => h.end))].sort();
+    const at = (m, e) => { const h = hv(m).find(x => x.end === e); return h ? h.value / 1e9 : null; };
+    if (labs.length > 1) charts.push(new Chart($("#c5"), {type: "bar", data: {labels: labs.map(e => e.slice(0, 7)), datasets: [
+      {label: "Ventas 12 m (miles de M$)", data: labs.map(e => at("revenue", e)), backgroundColor: css("--accent-soft"), borderColor: css("--accent"), borderWidth: 1},
+      {label: "Beneficio neto 12 m (miles de M$)", data: labs.map(e => at("net_income", e)), backgroundColor: css("--pos")}]},
+      options: {...opts, scales: {x: {grid, ticks: {...ticks, maxRotation: 0, autoSkipPadding: 12}}, y: {grid, ticks}}}}));
+  }
+
   if (hasIns && ins.monthly.length && ins.rows.length) {
     charts.push(new Chart($("#c4"), {type: "bar", data: {labels: ins.monthly.map(m => m.m), datasets: [
       {label: "Compras (M$)", data: ins.monthly.map(m => m.buy / 1e6), backgroundColor: css("--pos")},
@@ -589,11 +635,11 @@ async function show(cusip, redraw) {
 }
 
 /* ---------- sugerencias ---------- */
-["#s-profile", "#s-min", "#s-liq", "#s-pe", "#s-peg", "#s-n", "#s-high", "#s-up"].forEach(id => $(id).onchange = loadSug);
+["#s-profile", "#s-min", "#s-liq", "#s-rev", "#s-pe", "#s-peg", "#s-n", "#s-high", "#s-up"].forEach(id => $(id).onchange = loadSug);
 let sugSeq = 0;
 async function loadSug() {
   const seq = ++sugSeq;
-  const qs = new URLSearchParams({profile: $("#s-profile").value, min: $("#s-min").value, n: $("#s-n").value, liq: $("#s-liq").value, pe: $("#s-pe").value, peg: $("#s-peg").value,
+  const qs = new URLSearchParams({profile: $("#s-profile").value, min: $("#s-min").value, n: $("#s-n").value, liq: $("#s-liq").value, pe: $("#s-pe").value, peg: $("#s-peg").value, rev: $("#s-rev").value,
     high: $("#s-high").checked ? "1" : "0", up: $("#s-up").checked ? "1" : "0"});
   $("#s-info").textContent = "Calculando… (la primera vez descarga precios y tarda unos segundos)";
   const r = await fetch("/api/suggest?" + qs).then(r => r.json()).catch(e => ({error: e.message}));
@@ -623,7 +669,7 @@ async function loadSug() {
       <div class="bars"><span>13F</span><div class="bar"><i style="width:${x.s13}%"></i></div><span>${Math.round(x.s13)}</span>
         <span>Técnico</span><div class="bar"><i style="width:${x.stech}%"></i></div><span>${Math.round(x.stech)}</span></div>
       <div class="sprow">${spark(x.spark.slice(-5))}<span>${fmt(x.n_before)} → <b style="color:var(--text)">${fmt(x.n_now)}</b> gestoras ·
-        ${fmtP(x.close)} $ · ${pct(x.pct_from_high, 1)} del máx. intradía · ${fmtLiq(x.dollar_vol)}/día · ${peText(x)}</span></div>
+        ${fmtP(x.close)} $ · ${pct(x.pct_from_high, 1)} del máx. intradía · ${fmtLiq(x.dollar_vol)}/día · ${peText(x)}${x.revenue_growth == null ? "" : " · ventas " + pct(x.revenue_growth)}</span></div>
       <div class="badges">${badges.map(([t, c]) => `<span class="bd ${c}">${esc(t)}</span>`).join("")}</div>
       <ul>${x.reasons.map(t => `<li>${esc(t)}</li>`).join("")}</ul>
     </div>`;
@@ -641,6 +687,7 @@ $("#s-csv").onclick = () => downloadCSV("stocks_on_fire.csv", lastSug, [
   ["d_recent", "Netas 2 últimos T"], ["d_prior", "Netas 2 T anteriores"], ["consistency", "Trimestres al alza (de 4)"],
   ["pct_shares", "% acciones en manos de gestoras"], ["entries_conv", "Entradas con convicción"], ["buyers", "Compran"],
   ["sellers", "Venden"], ["close", "Precio"], ["pct_from_high", "% desde máx. 52 s"], ["vol_ratio", "Volumen 10d / 50d"], ["fwd_pe", "PER forward"], ["pe", "PER actual"], ["eps_growth", "BPA esperado %"], ["peg", "PEG"],
+  ["revenue_growth", "Ventas 1 año % (SEC)"], ["ni_growth", "Beneficio 1 año % (SEC)"], ["net_margin", "Margen neto % (SEC)"],
   [(r) => r.dollar_vol / 1e6, "Volumen medio M$/día"],
   [(r) => r.breakout ? "sí" : "no", "Ruptura 10 sesiones"], [(r) => r.above_sma200 ? "sí" : "no", "Sobre media 200"],
   ["ret_6m", "Rent. 6 m %"], ["rs_6m", "FR 6 m vs SPY"], ["cusip", "CUSIP"]]);
@@ -668,7 +715,7 @@ async function loadRanking() {
   const hl = k => metric === k ? ' style="font-weight:650"' : "";
   $("#rt").innerHTML = `<tr><th>#</th><th>Ticker</th><th>Empresa</th><th>Gestoras antes</th><th>ahora</th>
     <th>Netas</th><th>%</th><th>Entran / salen</th><th title="Entradas con más del 1 % de la cartera de la gestora">Con convicción</th>
-    <th title="Entre las gestoras que ya la tenían">Compran / venden</th><th>Acciones %</th><th>PER fwd</th><th>PEG</th><th>Valor B$</th><th></th></tr>` +
+    <th title="Entre las gestoras que ya la tenían">Compran / venden</th><th>Acciones %</th><th>Ventas 1 año</th><th>PER fwd</th><th>PEG</th><th>Valor B$</th><th></th></tr>` +
     r.rows.map((x, i) => `<tr class="click" data-c="${x.cusip}" data-t="${esc(x.ticker || x.cusip)}">
       <td>${i + 1}</td><td class="tk">${esc(x.ticker || "—")}</td>
       <td class="n">${esc(x.name)}${x.split !== 1 ? ` <span class="sub">(split ${x.split >= 1 ? x.split + "×1" : "1×" + Math.round(1 / x.split)})</span>` : ""}</td>
@@ -679,6 +726,7 @@ async function loadRanking() {
       <td>${fmt(x.entries_conv)}</td>
       <td><span class="${x.buyers > x.sellers ? "pos" : ""}">${fmt(x.buyers)}</span> / <span class="${x.sellers > x.buyers ? "neg" : ""}">${fmt(x.sellers)}</span></td>
       <td class="${cls(x.pct_shares)}"${hl("acciones")}>${pct(x.pct_shares, 1)}</td>
+      <td class="${cls(x.revenue_growth)}">${pct(x.revenue_growth)}</td>
       <td>${x.fwd_pe == null ? "—" : x.fwd_pe <= 0 ? '<span class="neg">pérd.</span>' : fmt1(x.fwd_pe)}</td>
       <td>${x.peg == null ? "—" : `<span class="${x.peg <= 1 ? "pos" : x.peg > 2 ? "neg" : ""}">${fmt2(x.peg)}</span>`}</td>
       <td>${fmtB(x.value_now)}</td><td><button type="button" class="star" data-c="${x.cusip}">☆</button></td></tr>`).join("");
@@ -693,7 +741,7 @@ $("#r-csv").onclick = () => downloadCSV("ranking_13f.csv", lastRank, [
   ["ticker", "Ticker"], ["name", "Empresa"], ["n_before", "Gestoras antes"], ["n_now", "Gestoras ahora"], ["d_filers", "Netas"],
   ["pct_filers", "% gestoras"], ["entries", "Entran"], ["exits", "Salen"], ["entries_conv", "Entradas con convicción"],
   ["buyers", "Compran"], ["sellers", "Venden"], ["pct_shares", "% acciones"], ["split", "Split"],
-  ["fwd_pe", "PER forward"], ["peg", "PEG"],
+  ["fwd_pe", "PER forward"], ["peg", "PEG"], ["revenue_growth", "Ventas 1 año %"],
   [(r) => r.value_now / 1e9, "Valor B$"], ["cusip", "CUSIP"]]);
 
 /* ---------- favoritos ---------- */
@@ -704,7 +752,7 @@ async function loadFavs() {
   const r = await fetch("/api/watch?cusips=" + f.map(x => x.cusip).join(",")).then(r => r.json());
   lastFav = r.rows;
   $("#ft").innerHTML = `<tr><th>Ticker</th><th>Empresa</th><th>Gestoras (5 T)</th><th>ahora</th><th>Netas 1 año</th>
-    <th>2 últimos T vs 2 anteriores</th><th>Precio</th><th>Desde máx. 52 s</th><th>Media 200</th><th>FR 6 m</th><th>PER fwd</th><th>PEG</th><th></th></tr>` +
+    <th>2 últimos T vs 2 anteriores</th><th>Precio</th><th>Desde máx. 52 s</th><th>Media 200</th><th>FR 6 m</th><th>Ventas 1 año</th><th>PER fwd</th><th>PEG</th><th></th></tr>` +
     r.rows.map(x => {
       const acc = x.d_recent > x.d_prior && x.d_recent > 0;
       return `<tr class="click" data-c="${x.cusip}">
@@ -716,6 +764,7 @@ async function loadFavs() {
       <td>${badgeHTML(highBadge(x)) || pct(x.pct_from_high, 1)}</td>
       <td>${x.above_sma200 == null ? "—" : x.above_sma200 ? '<span class="pos">encima</span>' : '<span class="neg">debajo</span>'}</td>
       <td class="${cls(x.rs_6m)}">${sign(x.rs_6m)}</td>
+      <td class="${cls(x.revenue_growth)}">${pct(x.revenue_growth)}</td>
       <td>${x.fwd_pe == null ? "—" : x.fwd_pe <= 0 ? '<span class="neg">pérd.</span>' : fmt1(x.fwd_pe)}</td>
       <td>${x.peg == null ? "—" : `<span class="${x.peg <= 1 ? "pos" : x.peg > 2 ? "neg" : ""}">${fmt2(x.peg)}</span>`}</td>
       <td><button type="button" class="star on" data-c="${x.cusip}" title="Quitar de favoritos">★</button></td></tr>`;
@@ -730,7 +779,7 @@ $("#f-csv").onclick = () => downloadCSV("favoritos_13f.csv", lastFav, [
   ["ticker", "Ticker"], ["name", "Empresa"], ["n_now", "Gestoras ahora"], ["d_filers", "Netas 1 año"], ["d_recent", "Netas 2 últimos T"],
   ["d_prior", "Netas 2 T anteriores"], ["close", "Precio"], ["pct_from_high", "% desde máx. 52 s"],
   [(r) => r.above_sma200 ? "sí" : "no", "Sobre media 200"], ["rs_6m", "FR 6 m vs SPY"], ["fwd_pe", "PER forward"],
-  ["peg", "PEG"], ["cusip", "CUSIP"]]);
+  ["peg", "PEG"], ["revenue_growth", "Ventas 1 año %"], ["cusip", "CUSIP"]]);
 
 /* ---------- actualización de datos ---------- */
 const updBtn = $("#upd"), updMsg = $("#updmsg");
