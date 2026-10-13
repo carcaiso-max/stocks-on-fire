@@ -16,6 +16,17 @@ Funciona **en tu ordenador**: no hay servidores, cuentas ni suscripciones. Tú d
 
 ---
 
+## Instalación rápida (Windows)
+
+1. **Instala Python** desde [python.org/downloads](https://www.python.org/downloads/). En la primera pantalla del instalador **marca la casilla «Add python.exe to PATH»**.
+2. **Descarga la app**: [stocks-on-fire-main.zip](https://github.com/carcaiso-max/stocks-on-fire/archive/refs/heads/main.zip) y descomprímela (clic derecho → «Extraer todo»).
+3. **Haz doble clic en `iniciar.bat`**. La primera vez instala solo lo que necesita (un minuto) y abre la app en el navegador.
+4. En la pantalla de bienvenida pon tu nombre y email (los pide la SEC) y pulsa **«Descargar datos»**: unos 5,5 GB, alrededor de una hora la primera vez.
+
+Después, cada vez que quieras usarla: doble clic en `iniciar.bat` y deja abierta la ventana negra mientras la uses.
+
+En Mac o Linux: instala Python 3, descarga el ZIP y ejecuta `sh iniciar.sh` desde una terminal en la carpeta.
+
 ## Requisitos
 
 - **Python 3.11 o superior** (probado con Python 3.14 y pandas 3.0) — descárgalo de [python.org](https://www.python.org/downloads/).
@@ -30,7 +41,7 @@ Funciona **en tu ordenador**: no hay servidores, cuentas ni suscripciones. Tú d
    git clone https://github.com/carcaiso-max/stocks-on-fire.git
    ```
 
-2. Instala las dos librerías que necesita, desde una consola en la carpeta del proyecto:
+2. Instala las dos librerías que necesita (`iniciar.bat` e `iniciar.sh` lo hacen solos si faltan), desde una consola en la carpeta del proyecto:
 
    ```bash
    pip install -r requirements.txt
