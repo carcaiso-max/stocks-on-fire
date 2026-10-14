@@ -25,11 +25,22 @@ Funciona **en tu ordenador**: no hay servidores, cuentas ni suscripciones. Tú d
 
 Después, cada vez que quieras usarla: doble clic en `iniciar.bat` y deja abierta la ventana negra mientras la uses.
 
-En Mac o Linux: instala Python 3, descarga el ZIP y ejecuta `sh iniciar.sh` desde una terminal en la carpeta.
+## Instalación rápida (Mac)
+
+1. **Instala Python** desde [python.org/downloads](https://www.python.org/downloads/) (el instalador para macOS).
+2. **Descarga la app**: [stocks-on-fire-main.zip](https://github.com/carcaiso-max/stocks-on-fire/archive/refs/heads/main.zip). Safari la descomprime sola en Descargas.
+3. **Abre `iniciar.command`**. La primera vez macOS avisará de que es de un desarrollador no identificado: haz **clic derecho (o Ctrl + clic) → Abrir → Abrir**. Si aun así lo bloquea: *Ajustes del Sistema → Privacidad y seguridad → «Abrir igualmente»*. La primera vez prepara lo necesario (un par de minutos) y abre la app en el navegador.
+4. Igual que en Windows: nombre y email, y **«Descargar datos»**.
+
+Después, para usarla: doble clic en `iniciar.command` y deja abierta la ventana de Terminal mientras la uses.
+
+**Linux:** `sh iniciar.sh` desde una terminal en la carpeta (en Debian/Ubuntu puede hacer falta `sudo apt install python3-venv`).
+
+> La versión de Mac y Linux está preparada pero **sin probar en un Mac real**: si algo falla, abre un *issue* en GitHub con el mensaje de la ventana.
 
 ## Requisitos
 
-- **Python 3.11 o superior** (probado con Python 3.14 y pandas 3.0) — descárgalo de [python.org](https://www.python.org/downloads/).
+- **Python 3.10 o superior** (probado en Windows con Python 3.14 y pandas 3.0) — descárgalo de [python.org](https://www.python.org/downloads/).
 - Unos **7 GB de espacio libre** y conexión a internet.
 - Un navegador moderno (Chrome, Edge, Firefox, Safari).
 
@@ -50,7 +61,7 @@ En Mac o Linux: instala Python 3, descarga el ZIP y ejecuta `sh iniciar.sh` desd
 ## Arrancar la app
 
 - **Windows:** doble clic en `iniciar.bat`.
-- **Mac / Linux:** `sh iniciar.sh` (o `python3 app_13f.py`).
+- **Mac:** doble clic en `iniciar.command`. **Linux:** `sh iniciar.sh`.
 
 Se abrirá el navegador en `http://127.0.0.1:8613`. La ventana de la consola es el servidor: **déjala abierta mientras uses la app**. Si la cierras, la app deja de responder.
 
@@ -122,7 +133,7 @@ python backtest_fundamentales.py    # valoración, crecimiento y filtros sobre l
 | `valoracion.py` | PER forward, PER actual, PEG y sector (Yahoo) |
 | `fundamentales.py` | Estados financieros de la SEC (XBRL) en 12 meses móviles, con fecha de publicación |
 | `backtest_*.py`, `estrategia_aceleracion.py`, `historial_flujos.py` | Backtests |
-| `iniciar.bat` / `iniciar.sh` | Arranque con doble clic |
+| `iniciar.bat` / `iniciar.command` / `iniciar.sh` | Arranque con doble clic (Windows / Mac) o desde terminal (Linux) |
 | `actualizar_datos.bat` | Actualizar desde la consola (Windows) |
 
 ## Fuentes de datos y licencias

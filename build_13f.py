@@ -19,6 +19,16 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+if sys.platform == "darwin":
+    # El Python oficial de Mac no trae certificados de seguridad activados; sin esto fallan todas las descargas HTTPS.
+    try:
+        import ssl
+
+        import certifi
+        ssl._create_default_https_context = lambda: ssl.create_default_context(cafile=certifi.where())
+    except ImportError:
+        pass
+
 LISTING_URL = "https://www.sec.gov/data-research/sec-markets-data/form-13f-data-sets"
 DATA_DIR = Path(os.environ.get("FONDOS13F_DIR", Path.home() / "fondos13f"))
 RAW_DIR = DATA_DIR / "raw"
